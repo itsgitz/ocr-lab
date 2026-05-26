@@ -23,5 +23,6 @@
       "shared": ["./packages/shared/src/types.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts"],
+  "exclude": ["packages/frontend/src/**/*.ts"]
 }

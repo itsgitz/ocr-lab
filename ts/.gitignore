@@ -22,6 +22,12 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.production.local
 .env.local
 
+# SvelteKit generated files
+.svelte-kit
+
+# SvelteKit build output
+build
+
 # caches
 .eslintcache
 .cache

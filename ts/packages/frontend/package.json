@@ -1,12 +1,20 @@
 {
   "name": "frontend",
   "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "shared": "workspace:*"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "catalog:",
     "@sveltejs/kit": "catalog:",
-    "svelte": "catalog:"
+    "@tailwindcss/vite": "catalog:",
+    "svelte": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:"
   }
 }

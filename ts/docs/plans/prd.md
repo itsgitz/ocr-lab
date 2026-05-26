@@ -133,6 +133,8 @@ A minimal, fast, server-side OCR web app:
 | Runtime | Bun | v1.3+ |
 | Backend API | Hono | v4+ |
 | Frontend Framework | SvelteKit | v2+ (Svelte 5 runes) |
+| CSS Framework | Tailwind CSS | v4+ |
+| Build Tool | Vite | v6+ |
 | SSR Adapter | @sveltejs/adapter-node | latest |
 | OCR Engine | Tesseract.js | v7 |
 | Validation | Zod + @hono/zod-validator | latest |
@@ -168,15 +170,18 @@ ocr-lab/ts/
 │   ├── frontend/                     # SvelteKit frontend (port 3000)
 │   │   ├── package.json
 │   │   ├── svelte.config.js          # adapter-node
+│   │   ├── vite.config.ts            # SvelteKit + Tailwind v4 plugins
 │   │   ├── tsconfig.json
 │   │   └── src/
 │   │       ├── routes/
-│   │       │   ├── +page.svelte      # Upload UI
-│   │       │   └── +page.server.ts   # Form action → calls Hono API
+│   │       │   ├── +page.svelte      # Upload UI (Tailwind CSS)
+│   │       │   ├── +page.server.ts   # Form action → calls Hono API
+│   │       │   └── +page.server.test.ts
 │   │       ├── lib/
 │   │       │   └── api.ts            # Typed API client
 │   │       ├── app.html
-│   │       └── app.css
+│   │       ├── app.css               # @import "tailwindcss"
+│   │       └── app.d.ts              # SvelteKit ambient types
 │   │
 │   └── shared/                       # Shared types
 │       ├── package.json

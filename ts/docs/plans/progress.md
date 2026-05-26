@@ -2,7 +2,7 @@
 
 **Started:** 2026-05-27
 **Status:** In Progress
-**Current Phase:** Phase 2 (OCR API) — ✅ Complete
+**Current Phase:** Phase 3 (SvelteKit Frontend) — ✅ Complete
 
 ---
 
@@ -12,7 +12,7 @@
 |-------|--------|---------|-----------|-------|
 | 1. Foundation | ✅ Complete | 2026-05-27 | 2026-05-27 | Monorepo setup, Hono server, health endpoint, OCR service, tests |
 | 2. OCR API | ✅ Complete | 2026-05-27 | 2026-05-27 | POST /api/ocr, validation middleware, rate limiting, error handling |
-| 3. SvelteKit Frontend | ⬜ Pending | — | — | — |
+| 3. SvelteKit Frontend | ✅ Complete | 2026-05-27 | 2026-05-27 | Tailwind v4, Svelte 5 runes, progressive enhancement, 29 tests all passing |
 | 4. Production & Polish | ⬜ Pending | — | — | — |
 
 ---
@@ -106,36 +106,39 @@
 
 ### Tasks
 
-- [ ] Initialize SvelteKit in `packages/frontend/` with `adapter-node`
-- [ ] Create upload page (`packages/frontend/src/routes/+page.svelte`)
-  - [ ] File input with drag-and-drop zone
-  - [ ] Language selector dropdown (eng, chi_sim, jpn, kor, fra, deu, spa)
-  - [ ] Submit button
-- [ ] Implement form action (`packages/frontend/src/routes/+page.server.ts`)
-  - [ ] Parse FormData
-  - [ ] Call Hono API via `fetch('http://localhost:3001/api/ocr')`
-  - [ ] Handle errors with `fail()`
-  - [ ] Return result to page
-- [ ] Create result display
-  - [ ] Extracted text in `<pre>` block
-  - [ ] Confidence score as percentage
-  - [ ] Processing time display
-  - [ ] Copy to clipboard button
-- [ ] Add loading state during processing
-- [ ] Add error message display
-- [ ] Progressive enhancement: form works without JavaScript
-- [ ] Style with CSS (minimal, clean)
-- [ ] Write tests
-  - [ ] Component: form action logic
-  - [ ] Component: error handling
+- [x] Initialize SvelteKit in `packages/frontend/` with `adapter-node`
+  - [x] Create `svelte.config.js`, `vite.config.ts`, `tsconfig.json`
+  - [x] Create `app.html`, `app.css` (Tailwind v4), `app.d.ts`
+- [x] Create upload page (`packages/frontend/src/routes/+page.svelte`)
+  - [x] File input with drag-and-drop zone (JS-enhanced, file picker fallback)
+  - [x] Language selector dropdown (from shared `OCR_LANGUAGES`)
+  - [x] Submit button with loading state
+  - [x] Image preview before submission (JS-enhanced)
+- [x] Implement form action (`packages/frontend/src/routes/+page.server.ts`)
+  - [x] Parse FormData
+  - [x] Call Hono API via `fetch('http://localhost:3001/api/ocr')`
+  - [x] Handle errors with `fail()`
+  - [x] Return result to page
+- [x] Create result display
+  - [x] Extracted text in `<pre>` block
+  - [x] Confidence score as percentage
+  - [x] Processing time display
+  - [x] Copy to clipboard button (progressive enhancement — hidden without JS)
+- [x] Add loading state during processing
+- [x] Add error message display
+- [x] Progressive enhancement: form works without JavaScript
+- [x] Style with Tailwind CSS v4 (clean, minimal, responsive)
+- [x] Write tests
+  - [x] Unit: form action logic (mocked fetch)
+  - [x] Unit: error handling (400, 413, 429, 500)
 
 ### Acceptance Criteria
 
-- [ ] Page renders server-side
-- [ ] Upload form submits via form action
-- [ ] Result displays with text, confidence, copy button
-- [ ] Works without JavaScript (progressive enhancement)
-- [ ] All tests pass
+- [x] Page renders server-side
+- [x] Upload form submits via form action
+- [x] Result displays with text, confidence, copy button
+- [x] Works without JavaScript (progressive enhancement)
+- [x] All 29 tests pass (6 files across server + frontend)
 
 ---
 
@@ -175,6 +178,11 @@
 | 2026-05-27 | Single Tesseract worker | Deferred worker pool to future roadmap |
 | 2026-05-27 | Direct middleware validation over Zod schemas | FormData validation is simpler with direct checks; Zod better suited for JSON body validation |
 | 2026-05-27 | `bun test --isolate` as default | `mock.module()` leaks across test files without isolation |
+| 2026-05-27 | Mock `tesseract.js` instead of `../src/services/ocr` in route tests | Avoids module path conflict with real OCR service tests |
+| 2026-05-27 | Tailwind CSS v4 with `@tailwindcss/vite` plugin | No PostCSS config needed, native Vite integration |
+| 2026-05-27 | SvelteKit `kit.alias` instead of tsconfig paths | Avoids conflict with SvelteKit's auto-generated tsconfig |
+| 2026-05-27 | Frontend tests placed in `tests/` not `src/routes/` | SvelteKit reserves `+` prefix in routes directory |
+| 2026-05-27 | Frontend excluded from root `tsc --noEmit` | SvelteKit uses its own type generation; root `tsc` doesn't understand `$lib` or `$types` |
 | 2026-05-27 | Added `image/x-ms-bmp` to allowed types | Bun's FormData normalizes `image/bmp` to `image/x-ms-bmp` |
 | 2026-05-27 | Deferred E2E test with real Tesseract | Integration tests with mocked OCR service cover all behaviors; E2E deferred to avoid test fixture management |
 

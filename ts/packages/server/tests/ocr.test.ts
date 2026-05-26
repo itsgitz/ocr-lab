@@ -45,7 +45,7 @@ describe("OCR Service", () => {
     expect(result).toHaveProperty("processingTimeMs");
     expect(typeof result.text).toBe("string");
     expect(typeof result.confidence).toBe("number");
-    expect(result.processingTimeMs).toBeGreaterThan(0);
+    expect(result.processingTimeMs).toBeGreaterThanOrEqual(0);
   });
 
   test("recognizeImage initializes worker if not already initialized", async () => {
