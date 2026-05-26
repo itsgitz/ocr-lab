@@ -23,40 +23,40 @@
 
 ### Tasks
 
-- [ ] Initialize Bun monorepo structure
-  - [ ] Create `packages/server/`, `packages/frontend/`, `packages/shared/`
-  - [ ] Configure root `package.json` with workspaces + catalogs
-  - [ ] Create individual `package.json` for each workspace
-  - [ ] Configure `tsconfig.json` for root + each package
-- [ ] Install dependencies via `bun install`
-  - [ ] Server: `hono`, `@hono/zod-validator`, `zod`, `tesseract.js`, `shared@workspace:*`
-  - [ ] Frontend: `@sveltejs/kit`, `@sveltejs/adapter-node`, `svelte`, `shared@workspace:*`
-  - [ ] Shared: export types
-- [ ] Create shared types (`packages/shared/src/types.ts`)
-  - [ ] `OCRResult` interface
-  - [ ] `HealthResponse` interface
-  - [ ] `OCR_LANGUAGES` constant
-- [ ] Create Hono server entry (`packages/server/src/index.ts`)
-  - [ ] `Bun.serve()` with `app.fetch`
-  - [ ] `maxRequestBodySize` config
-  - [ ] Graceful shutdown handler
-- [ ] Implement Tesseract.js worker service (`packages/server/src/services/ocr.ts`)
-  - [ ] `initWorker()` — initialize on startup
-  - [ ] `recognizeImage(image: File, lang: string)` — process image
-  - [ ] `terminateWorker()` — cleanup on shutdown
-- [ ] Add GET `/api/health` endpoint
-  - [ ] Returns `{ status, workerReady, uptime }`
-- [ ] Write tests
-  - [ ] Unit: OCR service (mocked worker)
-  - [ ] Integration: health endpoint
+- [x] Initialize Bun monorepo structure
+  - [x] Create `packages/server/`, `packages/frontend/`, `packages/shared/`
+  - [x] Configure root `package.json` with workspaces + catalogs
+  - [x] Create individual `package.json` for each workspace
+  - [x] Configure `tsconfig.json` for root + each package
+- [x] Install dependencies via `bun install`
+  - [x] Server: `hono`, `@hono/zod-validator`, `zod`, `tesseract.js`, `shared@workspace:*`
+  - [x] Frontend: `@sveltejs/kit`, `@sveltejs/adapter-node`, `svelte`, `shared@workspace:*`
+  - [x] Shared: export types
+- [x] Create shared types (`packages/shared/src/types.ts`)
+  - [x] `OCRResult` interface
+  - [x] `HealthResponse` interface
+  - [x] `OCR_LANGUAGES` constant
+- [x] Create Hono server entry (`packages/server/src/index.ts`)
+  - [x] `Bun.serve()` with `app.fetch`
+  - [x] `maxRequestBodySize` config
+  - [x] Graceful shutdown handler
+- [x] Implement Tesseract.js worker service (`packages/server/src/services/ocr.ts`)
+  - [x] `initWorker()` — initialize on startup
+  - [x] `recognizeImage(image: File, lang: string)` — process image
+  - [x] `terminateWorker()` — cleanup on shutdown
+- [x] Add GET `/api/health` endpoint
+  - [x] Returns `{ status, workerReady, uptime }`
+- [x] Write tests
+  - [x] Unit: OCR service (mocked worker)
+  - [x] Integration: health endpoint
 
 ### Acceptance Criteria
 
-- [ ] `bun install` succeeds
-- [ ] Server starts on `0.0.0.0:3001`
-- [ ] `GET /api/health` returns `{ status: "ok", workerReady: true }`
-- [ ] `bun test` passes
-- [ ] `bun typecheck` passes
+- [x] `bun install` succeeds
+- [x] Server starts on `0.0.0.0:3001`
+- [x] `GET /api/health` returns `{ status: "ok", workerReady: true }`
+- [x] `bun test` passes
+- [x] `bun typecheck` passes
 
 ---
 
