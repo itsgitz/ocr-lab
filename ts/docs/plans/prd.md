@@ -1,8 +1,26 @@
 # OCR Lab — Product Requirements Document (PRD)
 
 **Date:** 2026-05-27
-**Status:** Draft — awaiting review
-**Version:** 1.0
+**Status:** Approved — ready for implementation
+**Version:** 1.1
+
+---
+
+## 0. Architecture Decision: Bun Monorepo Workspaces
+
+This project uses Bun workspaces for a clean monorepo structure with three packages:
+
+| Package | Path | Purpose |
+|---------|------|---------|
+| `server` | `packages/server/` | Hono backend API (port 3001) |
+| `frontend` | `packages/frontend/` | SvelteKit SSR frontend (port 3000) |
+| `shared` | `packages/shared/` | Shared TypeScript types |
+
+**Key patterns:**
+- Root `package.json` defines `workspaces: ["packages/*"]` and `catalog` for centralized dependency versions
+- Internal packages referenced via `workspace:*` protocol
+- No CORS needed — SvelteKit form actions call Hono via server-side `fetch()`
+- PM2 manages both `server` and `frontend` as separate processes
 
 ---
 
@@ -125,40 +143,54 @@ A minimal, fast, server-side OCR web app:
 
 ```
 ocr-lab/ts/
-├── src/
-│   ├── server/                    # Hono backend
-│   │   ├── index.ts               # Entry point, Bun.serve()
-│   │   ├── routes/
-│   │   │   ├── api.ts             # API route group
-│   │   │   └── ocr.ts             # OCR endpoint
-│   │   ├── middleware/
-│   │   │   ├── upload.ts          # File validation
-│   │   │   └── rate-limit.ts      # IP-based rate limiting
-│   │   ├── services/
-│   │   │   └── ocr.ts             # Tesseract.js worker management
-│   │   └── tests/
-│   │       ├── ocr.test.ts        # Unit tests (mocked worker)
-│   │       └── api.test.ts        # Integration tests
-│   └── frontend/                  # SvelteKit frontend
-│       ├── src/
-│       │   ├── routes/
-│       │   │   ├── +page.svelte   # Upload UI
-│       │   │   └── +page.server.ts # Form action
-│       │   ├── lib/
-│       │   │   └── api.ts         # Typed API client
-│       │   ├── app.html
-│       │   └── app.css
-│       ├── svelte.config.js
-│       └── tests/
-│           └── page.test.ts       # Form action tests
-├── shared/                        # Shared types
-│   └── types.ts
-├── ecosystem.config.js            # PM2 configuration
+├── package.json                      # Root workspace config + catalogs
+├── tsconfig.json                     # Root TS config
+├── ecosystem.config.js               # PM2 configuration
+│
+├── packages/
+│   ├── server/                       # Hono backend (port 3001)
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src/
+│   │       ├── index.ts              # Bun.serve() entry point
+│   │       ├── routes/
+│   │       │   ├── health.ts         # GET /api/health
+│   │       │   └── ocr.ts            # POST /api/ocr
+│   │       ├── middleware/
+│   │       │   ├── rate-limit.ts     # IP-based rate limiting
+│   │       │   └── validate-image.ts # File type + size validation
+│   │       ├── services/
+│   │       │   └── ocr.ts            # Tesseract.js worker management
+│   │       └── tests/
+│   │           ├── ocr.test.ts       # Unit tests (mocked worker)
+│   │           └── api.test.ts       # Integration tests
+│   │
+│   ├── frontend/                     # SvelteKit frontend (port 3000)
+│   │   ├── package.json
+│   │   ├── svelte.config.js          # adapter-node
+│   │   ├── tsconfig.json
+│   │   └── src/
+│   │       ├── routes/
+│   │       │   ├── +page.svelte      # Upload UI
+│   │       │   └── +page.server.ts   # Form action → calls Hono API
+│   │       ├── lib/
+│   │       │   └── api.ts            # Typed API client
+│   │       ├── app.html
+│   │       └── app.css
+│   │
+│   └── shared/                       # Shared types
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── src/
+│           └── types.ts              # OCRResult, HealthResponse, etc.
+│
 ├── docs/
 │   └── plans/
-│       └── 2026-05-27-ocr-lab-prd.md
-├── package.json
-└── tsconfig.json
+│       ├── prd.md                    # This document
+│       └── progress.md               # Implementation tracking
+│
+├── package.json                      # Root workspace config
+└── tsconfig.json                     # Root TS config
 ```
 
 ### 5.3 Data Flow
@@ -254,7 +286,7 @@ PUBLIC_API_URL=http://<VPS_PUBLIC_IP>:3001
 module.exports = {
   apps: [{
     name: 'ocr-lab-server',
-    script: 'src/server/index.ts',
+    script: 'packages/server/src/index.ts',
     interpreter: 'bun',
     env: {
       NODE_ENV: 'production',
@@ -268,7 +300,7 @@ module.exports = {
     out_file: '/var/log/ocr-lab/out.log',
   }, {
     name: 'ocr-lab-frontend',
-    script: 'build/index.js',
+    script: 'packages/frontend/build/index.js',
     interpreter: 'node',
     env: {
       NODE_ENV: 'production',
@@ -286,15 +318,15 @@ module.exports = {
 ```json
 {
   "scripts": {
-    "dev:server": "bun --hot src/server/index.ts",
-    "dev:frontend": "bun --bun svelte-kit dev",
+    "dev:server": "bun --hot packages/server/src/index.ts",
+    "dev:frontend": "bun --filter frontend dev",
     "dev": "concurrently \"bun dev:server\" \"bun dev:frontend\"",
-    "build:frontend": "svelte-kit build",
+    "build:frontend": "bun --filter frontend build",
     "start:pm2": "pm2 start ecosystem.config.js",
     "stop:pm2": "pm2 stop ecosystem.config.js",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun --all typecheck"
   }
 }
 ```
@@ -325,9 +357,9 @@ module.exports = {
 
 ### 7.3 Test Fixtures
 
-- `src/server/tests/fixtures/sample.png` — small image with known text "Hello World"
-- `src/server/tests/fixtures/large.png` — image > 10MB for size limit testing
-- `src/server/tests/fixtures/invalid.txt` — non-image file for type validation
+- `packages/server/tests/fixtures/sample.png` — small image with known text "Hello World"
+- `packages/server/tests/fixtures/large.png` — image > 10MB for size limit testing
+- `packages/server/tests/fixtures/invalid.txt` — non-image file for type validation
 
 ---
 
@@ -335,12 +367,14 @@ module.exports = {
 
 ### Phase 1: Foundation
 
-**Goal:** Running Hono server with health endpoint and Tesseract.js worker service.
+**Goal:** Bun monorepo with running Hono server, health endpoint, and Tesseract.js worker service.
 
-- [ ] Initialize project structure
-- [ ] Install dependencies: `hono`, `tesseract.js`, `zod`, `@hono/zod-validator`
-- [ ] Create Hono server entry (`src/server/index.ts`)
-- [ ] Implement Tesseract.js worker service (`src/server/services/ocr.ts`)
+- [ ] Initialize Bun monorepo structure (`packages/server`, `packages/frontend`, `packages/shared`)
+- [ ] Configure root `package.json` with workspaces and catalogs
+- [ ] Install dependencies via catalogs: `hono`, `tesseract.js`, `zod`, `@hono/zod-validator`
+- [ ] Create shared types package (`packages/shared/src/types.ts`)
+- [ ] Create Hono server entry (`packages/server/src/index.ts`)
+- [ ] Implement Tesseract.js worker service (`packages/server/src/services/ocr.ts`)
   - `initWorker()`, `recognizeImage()`, `terminateWorker()`
 - [ ] Add GET `/api/health` endpoint
 - [ ] Write unit tests for OCR service (mocked worker)
@@ -357,11 +391,11 @@ module.exports = {
 
 **Goal:** Working POST `/api/ocr` endpoint with validation and error handling.
 
-- [ ] Implement POST `/api/ocr` route
+- [ ] Implement POST `/api/ocr` route (`packages/server/src/routes/ocr.ts`)
 - [ ] Add Zod schema validation for form data
-- [ ] Add file type validation middleware
+- [ ] Add file type validation middleware (`packages/server/src/middleware/validate-image.ts`)
 - [ ] Add body limit middleware (10MB)
-- [ ] Add IP-based rate limiting middleware
+- [ ] Add IP-based rate limiting middleware (`packages/server/src/middleware/rate-limit.ts`)
 - [ ] Implement error responses (400, 413, 429, 500)
 - [ ] Write integration tests for all error cases
 - [ ] Write E2E test with real OCR on sample image
@@ -378,13 +412,13 @@ module.exports = {
 
 **Goal:** SSR frontend with upload form, result display, and progressive enhancement.
 
-- [ ] Initialize SvelteKit project with `adapter-node`
-- [ ] Create upload page (`+page.svelte`)
+- [ ] Initialize SvelteKit in `packages/frontend/` with `adapter-node`
+- [ ] Create upload page (`packages/frontend/src/routes/+page.svelte`)
   - File input with drag-and-drop zone
   - Language selector dropdown
   - Submit button
-- [ ] Implement form action (`+page.server.ts`)
-  - Parse FormData, call Hono API
+- [ ] Implement form action (`packages/frontend/src/routes/+page.server.ts`)
+  - Parse FormData, call Hono API via `fetch('http://localhost:3001/api/ocr')`
   - Handle errors, return result
 - [ ] Create result display component
   - Extracted text in `<pre>` block
