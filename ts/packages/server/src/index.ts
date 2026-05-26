@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import health from "./routes/health";
+import ocr from "./routes/ocr";
 import { initWorker, terminateWorker } from "./services/ocr";
 
 const app = new Hono();
@@ -8,6 +9,7 @@ const app = new Hono();
 app.use("*", cors());
 
 app.route("/", health);
+app.route("/", ocr);
 
 const port = parseInt(process.env.PORT || "3001", 10);
 const host = process.env.HOST || "0.0.0.0";
@@ -16,7 +18,7 @@ const server = Bun.serve({
   fetch: app.fetch,
   port,
   hostname: host,
-  maxRequestBodySize: 20 * 1024 * 1024, // 20MB
+  maxRequestBodySize: 10 * 1024 * 1024,
 });
 
 console.log(`🚀 OCR Lab server running on http://${host}:${port}`);

@@ -28,6 +28,7 @@ export const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
   "image/gif",
   "image/bmp",
+  "image/x-ms-bmp",
   "image/webp",
 ] as const;
 
