@@ -1,12 +1,33 @@
 {
-  "name": "ts",
-  "module": "index.ts",
-  "type": "module",
+  "name": "ocr-lab",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
+  "workspaces": {
+    "packages": ["packages/*"],
+    "catalog": {
+      "hono": "^4.12.23",
+      "@hono/zod-validator": "^0.8.0",
+      "zod": "^4.4.3",
+      "tesseract.js": "^7.0.0",
+      "@sveltejs/adapter-node": "latest",
+      "@sveltejs/kit": "^2.0.0",
+      "svelte": "^5.0.0",
+      "@types/bun": "latest",
+      "typescript": "^5",
+      "concurrently": "latest"
+    }
   },
-  "peerDependencies": {
-    "typescript": "^5"
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  },
+  "scripts": {
+    "dev:server": "bun --hot packages/server/src/index.ts",
+    "dev:frontend": "bun --filter frontend dev",
+    "dev": "concurrently \"bun dev:server\" \"bun dev:frontend\"",
+    "build:frontend": "bun --filter frontend build",
+    "start:pm2": "pm2 start ecosystem.config.js",
+    "stop:pm2": "pm2 stop ecosystem.config.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "typecheck": "tsc --noEmit"
   }
 }

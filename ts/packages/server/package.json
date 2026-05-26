@@ -1,0 +1,14 @@
+{
+  "name": "server",
+  "type": "module",
+  "dependencies": {
+    "hono": "catalog:",
+    "@hono/zod-validator": "catalog:",
+    "zod": "catalog:",
+    "tesseract.js": "catalog:",
+    "shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  }
+}

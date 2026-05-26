@@ -1,0 +1,12 @@
+{
+  "name": "frontend",
+  "type": "module",
+  "dependencies": {
+    "shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "catalog:",
+    "@sveltejs/kit": "catalog:",
+    "svelte": "catalog:"
+  }
+}
