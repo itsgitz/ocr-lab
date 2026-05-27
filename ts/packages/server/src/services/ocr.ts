@@ -3,11 +3,18 @@ import type { OCRResult } from "shared";
 
 let worker: Tesseract.Worker | null = null;
 let isInitialized = false;
+let currentLang = "eng";
 
 export async function initWorker(lang = "eng"): Promise<void> {
-  if (isInitialized && worker) return;
+  if (worker) {
+    if (currentLang === lang && isInitialized) return;
+    await worker.terminate();
+    worker = null;
+    isInitialized = false;
+  }
 
   worker = await createWorker(lang);
+  currentLang = lang;
   isInitialized = true;
 }
 
@@ -15,7 +22,7 @@ export async function recognizeImage(
   image: File,
   lang = "eng"
 ): Promise<OCRResult> {
-  if (!worker || !isInitialized) {
+  if (!worker || !isInitialized || currentLang !== lang) {
     await initWorker(lang);
   }
 
@@ -39,6 +46,7 @@ export async function terminateWorker(): Promise<void> {
     await worker.terminate();
     worker = null;
     isInitialized = false;
+    currentLang = "eng";
   }
 }
 

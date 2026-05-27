@@ -2,7 +2,7 @@
 
 **Started:** 2026-05-27
 **Status:** In Progress
-**Current Phase:** Phase 3 (SvelteKit Frontend) — ✅ Complete
+**Current Phase:** Phase 4 (Production & Polish) — 🔄 In Progress
 
 ---
 
@@ -13,7 +13,7 @@
 | 1. Foundation | ✅ Complete | 2026-05-27 | 2026-05-27 | Monorepo setup, Hono server, health endpoint, OCR service, tests |
 | 2. OCR API | ✅ Complete | 2026-05-27 | 2026-05-27 | POST /api/ocr, validation middleware, rate limiting, error handling |
 | 3. SvelteKit Frontend | ✅ Complete | 2026-05-27 | 2026-05-27 | Tailwind v4, Svelte 5 runes, progressive enhancement, 29 tests all passing |
-| 4. Production & Polish | ⬜ Pending | — | — | — |
+| 4. Production & Polish | 🔄 In Progress | 2026-05-27 | — | PM2 config, .env.example, frontend build, hardening fixes. Deployment docs + VPS testing pending. |
 
 ---
 
@@ -148,21 +148,28 @@
 
 ### Tasks
 
-- [ ] Configure PM2 (`ecosystem.config.js`)
-  - [ ] Server process (Bun interpreter)
-  - [ ] Frontend process (Node interpreter, built output)
-  - [ ] Memory restart limit (500MB)
-  - [ ] Log paths (`/var/log/ocr-lab/`)
-- [ ] Configure environment variables for production
-- [ ] Build SvelteKit frontend for production
-- [ ] Test PM2 start/stop/restart
-- [ ] Manual testing on VPS
-- [ ] Write deployment documentation
+- [x] Configure PM2 (`ecosystem.config.cjs`)
+  - [x] Server process (Bun interpreter, `packages/server/src/index.ts`)
+  - [x] Frontend process (Node interpreter, `packages/frontend/build/index.js`)
+  - [x] Memory restart limit (500MB)
+  - [x] Log paths (`/var/log/ocr-lab/`)
+- [x] Create `.env.example` with all environment variables documented
+- [x] Build SvelteKit frontend for production (with `precompress: true`)
+- [x] Run all tests and typecheck — 33 tests passing
+- [ ] Test PM2 start/stop/restart (requires PM2 installed + VPS)
+- [ ] Manual testing on VPS (blocked — no VPS configured yet)
+- [ ] Write deployment documentation (blocked — depends on VPS setup)
+
+### Production Hardening
+
+- [x] Rate limit store: periodic cleanup (every 60s via `startCleanupTimer`) to prevent memory leak
+- [x] Rate limit IP detection: fallback chain `x-forwarded-for` → `x-real-ip` → `"unknown"`
+- [x] OCR worker: reinitialize worker when language changes (`initWorker` terminates + recreates)
 
 ### Acceptance Criteria
 
-- [ ] App accessible via `http://<VPS_PUBLIC_IP>:3000`
-- [ ] PM2 manages both server and frontend processes
+- [ ] App accessible via `http://<VPS_PUBLIC_IP>:3000` (requires VPS)
+- [ ] PM2 manages both server and frontend processes (requires VPS)
 - [ ] Auto-restart on crash or memory limit
 - [ ] Logs written to `/var/log/ocr-lab/`
 
@@ -185,6 +192,10 @@
 | 2026-05-27 | Frontend excluded from root `tsc --noEmit` | SvelteKit uses its own type generation; root `tsc` doesn't understand `$lib` or `$types` |
 | 2026-05-27 | Added `image/x-ms-bmp` to allowed types | Bun's FormData normalizes `image/bmp` to `image/x-ms-bmp` |
 | 2026-05-27 | Deferred E2E test with real Tesseract | Integration tests with mocked OCR service cover all behaviors; E2E deferred to avoid test fixture management |
+| 2026-05-27 | PM2 config uses `.cjs` extension | Root `package.json` has `"type": "module"`, so `.js` files are ESM; PM2 needs CJS for config |
+| 2026-05-27 | Rate limit periodic cleanup via `startCleanupTimer(60000)` | Prevents stale entries in the in-memory `Map` from accumulating indefinitely |
+| 2026-05-27 | IP detection chain: `x-forwarded-for` → `x-real-ip` → `unknown` | Ensures rate limiting works behind reverse proxies that set `x-real-ip` instead of `x-forwarded-for` |
+| 2026-05-27 | OCR worker reinitializes on language change | `initWorker` now terminates and recreates the worker if the requested language differs from the current one |
 
 ---
 

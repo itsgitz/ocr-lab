@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import health from "./routes/health";
 import ocr from "./routes/ocr";
 import { initWorker, terminateWorker } from "./services/ocr";
+import { startCleanupTimer } from "./middleware/rate-limit";
 
 const app = new Hono();
 
@@ -37,3 +38,6 @@ process.on("SIGTERM", gracefulShutdown);
 initWorker(process.env.OCR_DEFAULT_LANG || "eng").then(() => {
   console.log("✅ Tesseract.js worker initialized");
 });
+
+// Periodic cleanup of rate-limit store (every 60s)
+startCleanupTimer(60000);

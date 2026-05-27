@@ -11,9 +11,38 @@ interface RateLimitEntry {
 }
 
 const store = new Map<string, RateLimitEntry>();
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 function getClientIp(c: { req: { header(name: string): string | undefined } }): string {
-  return c.req.header("x-forwarded-for") || "unknown";
+  return c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+}
+
+function evictExpiredEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of store) {
+    if (now > entry.resetTime) {
+      store.delete(key);
+    }
+  }
+}
+
+export function forceCleanup(): void {
+  evictExpiredEntries();
+}
+
+export function startCleanupTimer(intervalMs: number): void {
+  stopCleanupTimer();
+  cleanupTimer = setInterval(evictExpiredEntries, intervalMs);
+  if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
+    (cleanupTimer as { unref(): void }).unref();
+  }
+}
+
+export function stopCleanupTimer(): void {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
 }
 
 export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
@@ -42,4 +71,5 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
 
 export function resetRateLimits(): void {
   store.clear();
+  stopCleanupTimer();
 }

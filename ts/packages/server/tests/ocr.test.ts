@@ -56,4 +56,17 @@ describe("OCR Service", () => {
     expect(result).toHaveProperty("text");
     expect(isWorkerReady()).toBe(true);
   });
+
+  test("recognizeImage reinitializes worker when language changes", async () => {
+    await initWorker("eng");
+    expect(isWorkerReady()).toBe(true);
+
+    const pngBytes = base64ToUint8Array(VALID_PNG_BASE64);
+    const file = new File([pngBytes], "test.png", { type: "image/png" });
+
+    const result = await recognizeImage(file, "fra");
+
+    expect(result).toHaveProperty("language", "fra");
+    expect(result).toHaveProperty("text");
+  });
 });
