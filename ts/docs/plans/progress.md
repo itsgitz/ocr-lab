@@ -1,8 +1,8 @@
 # OCR Lab — Implementation Progress
 
 **Started:** 2026-05-27
-**Status:** In Progress
-**Current Phase:** Phase 4 (Production & Polish) — 🔄 In Progress
+**Status:** Complete
+**Current Phase:** Phase 4 (Production & Polish) — ✅ Complete
 
 ---
 
@@ -13,7 +13,7 @@
 | 1. Foundation | ✅ Complete | 2026-05-27 | 2026-05-27 | Monorepo setup, Hono server, health endpoint, OCR service, tests |
 | 2. OCR API | ✅ Complete | 2026-05-27 | 2026-05-27 | POST /api/ocr, validation middleware, rate limiting, error handling |
 | 3. SvelteKit Frontend | ✅ Complete | 2026-05-27 | 2026-05-27 | Tailwind v4, Svelte 5 runes, progressive enhancement, 29 tests all passing |
-| 4. Production & Polish | 🔄 In Progress | 2026-05-27 | — | PM2 config, .env.example, frontend build, hardening fixes. Deployment docs + VPS testing pending. |
+| 4. Production & Polish | ✅ Complete | 2026-05-27 | 2026-05-27 | PM2 deployment verified on VPS (103.41.206.197), deployment docs written |
 
 ---
 
@@ -152,13 +152,20 @@
   - [x] Server process (Bun interpreter, `packages/server/src/index.ts`)
   - [x] Frontend process (Node interpreter, `packages/frontend/build/index.js`)
   - [x] Memory restart limit (500MB)
-  - [x] Log paths (`/var/log/ocr-lab/`)
+  - [x] Log paths (project-local `logs/` directory)
+  - [x] `.env` file loading (no dotenv dependency, portable across environments)
+  - [x] `exec_mode: "fork"` for server (required — PM2 cluster mode ignores custom interpreter)
+  - [x] `BUN_PATH` env var for portable bun binary resolution
 - [x] Create `.env.example` with all environment variables documented
 - [x] Build SvelteKit frontend for production (with `precompress: true`)
 - [x] Run all tests and typecheck — 33 tests passing
-- [ ] Test PM2 start/stop/restart (requires PM2 installed + VPS)
-- [ ] Manual testing on VPS (blocked — no VPS configured yet)
-- [ ] Write deployment documentation (blocked — depends on VPS setup)
+- [x] Test PM2 start/stop/restart on VPS
+- [x] Manual testing on VPS (103.41.206.197)
+  - [x] `GET /api/health` → `{ "status": "ok", "workerReady": true }` via public IP
+  - [x] `GET /` → SSR HTML with upload form via public IP
+  - [x] PM2 restart verified — both processes recover cleanly
+  - [x] PM2 process list saved (`pm2 save`)
+- [x] Write deployment documentation (`docs/deployment.md`)
 
 ### Production Hardening
 
@@ -168,10 +175,10 @@
 
 ### Acceptance Criteria
 
-- [ ] App accessible via `http://<VPS_PUBLIC_IP>:3000` (requires VPS)
-- [ ] PM2 manages both server and frontend processes (requires VPS)
-- [ ] Auto-restart on crash or memory limit
-- [ ] Logs written to `/var/log/ocr-lab/`
+- [x] App accessible via `http://103.41.206.197:3000`
+- [x] PM2 manages both server and frontend processes
+- [x] Auto-restart on crash or memory limit (500MB)
+- [x] Logs written to `logs/` (project-local)
 
 ---
 
@@ -196,6 +203,10 @@
 | 2026-05-27 | Rate limit periodic cleanup via `startCleanupTimer(60000)` | Prevents stale entries in the in-memory `Map` from accumulating indefinitely |
 | 2026-05-27 | IP detection chain: `x-forwarded-for` → `x-real-ip` → `unknown` | Ensures rate limiting works behind reverse proxies that set `x-real-ip` instead of `x-forwarded-for` |
 | 2026-05-27 | OCR worker reinitializes on language change | `initWorker` now terminates and recreates the worker if the requested language differs from the current one |
+| 2026-05-27 | PM2 `exec_mode: "fork"` for server process | PM2 cluster mode uses Node's `cluster` module internally, ignoring the custom `interpreter` field; fork mode is required for Bun |
+| 2026-05-27 | `.env` loading in `ecosystem.config.cjs` (no dotenv) | Lightweight custom parser keeps the config portable across environments without adding a dependency |
+| 2026-05-27 | Project-local `logs/` instead of `/var/log/ocr-lab/` | No sudo required, portable across dev/staging environments |
+| 2026-05-27 | `BUN_PATH` env var for PM2 interpreter | Bun installed per-user (`~/.bun/bin/bun`) isn't in PM2's default PATH; explicit path avoids silent fallback to Node |
 
 ---
 

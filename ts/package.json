@@ -29,6 +29,8 @@
     "build:frontend": "bun --filter frontend build",
 "start:pm2": "pm2 start ecosystem.config.cjs",
 "stop:pm2": "pm2 stop ecosystem.config.cjs",
+"restart:pm2": "pm2 restart ecosystem.config.cjs",
+"logs:pm2": "pm2 logs",
     "test": "bun test --isolate",
     "test:watch": "bun test --isolate --watch",
     "typecheck": "bunx tsc --noEmit"
