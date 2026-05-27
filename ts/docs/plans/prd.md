@@ -283,26 +283,32 @@ RATE_LIMIT_MAX_REQUESTS=20
 
 # Frontend (SvelteKit)
 PUBLIC_API_URL=http://<VPS_PUBLIC_IP>:3001
+FRONTEND_PORT=3000
+ORIGIN=http://<VPS_PUBLIC_IP>:3000
 ```
 
-### 6.2 PM2 Configuration (`ecosystem.config.js`)
+### 6.2 PM2 Configuration (`ecosystem.config.cjs`)
 
 ```js
 module.exports = {
   apps: [{
     name: 'ocr-lab-server',
     script: 'packages/server/src/index.ts',
-    interpreter: 'bun',
+    interpreter: '/path/to/bun',
+    exec_mode: 'fork',
     env: {
       NODE_ENV: 'production',
       PORT: 3001,
       HOST: '0.0.0.0',
+      OCR_DEFAULT_LANG: 'eng',
+      RATE_LIMIT_WINDOW_MS: '60000',
+      RATE_LIMIT_MAX_REQUESTS: '20',
     },
     instances: 1,
     autorestart: true,
     max_memory_restart: '500M',
-    error_file: '/var/log/ocr-lab/error.log',
-    out_file: '/var/log/ocr-lab/out.log',
+    error_file: './logs/server-error.log',
+    out_file: './logs/server-out.log',
   }, {
     name: 'ocr-lab-frontend',
     script: 'packages/frontend/build/index.js',
@@ -311,9 +317,13 @@ module.exports = {
       NODE_ENV: 'production',
       PORT: 3000,
       HOST: '0.0.0.0',
+      PUBLIC_API_URL: 'http://localhost:3001',
+      ORIGIN: 'http://<VPS_PUBLIC_IP>:3000',
     },
     instances: 1,
     autorestart: true,
+    error_file: './logs/frontend-error.log',
+    out_file: './logs/frontend-out.log',
   }]
 };
 ```
@@ -327,11 +337,13 @@ module.exports = {
     "dev:frontend": "bun --filter frontend dev",
     "dev": "concurrently \"bun dev:server\" \"bun dev:frontend\"",
     "build:frontend": "bun --filter frontend build",
-    "start:pm2": "pm2 start ecosystem.config.js",
-    "stop:pm2": "pm2 stop ecosystem.config.js",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
-    "typecheck": "bun --all typecheck"
+    "start:pm2": "pm2 start ecosystem.config.cjs",
+    "stop:pm2": "pm2 stop ecosystem.config.cjs",
+    "restart:pm2": "pm2 restart ecosystem.config.cjs",
+    "logs:pm2": "pm2 logs",
+    "test": "bun test --isolate",
+    "test:watch": "bun test --isolate --watch",
+    "typecheck": "bunx tsc --noEmit"
   }
 }
 ```

@@ -27,6 +27,7 @@ const OCR_DEFAULT_LANG = env.OCR_DEFAULT_LANG || process.env.OCR_DEFAULT_LANG ||
 const RATE_LIMIT_WINDOW_MS = env.RATE_LIMIT_WINDOW_MS || process.env.RATE_LIMIT_WINDOW_MS || "60000";
 const RATE_LIMIT_MAX_REQUESTS = env.RATE_LIMIT_MAX_REQUESTS || process.env.RATE_LIMIT_MAX_REQUESTS || "20";
 const PUBLIC_API_URL = env.PUBLIC_API_URL || process.env.PUBLIC_API_URL || `http://localhost:${PORT}`;
+const ORIGIN = env.ORIGIN || process.env.ORIGIN || "";
 const BUN_PATH = env.BUN_PATH || process.env.BUN_PATH || "bun";
 
 const logsDir = path.join(__dirname, "logs");
@@ -66,6 +67,7 @@ module.exports = {
         PORT: FRONTEND_PORT,
         HOST,
         PUBLIC_API_URL,
+        ORIGIN,
       },
       instances: 1,
       autorestart: true,

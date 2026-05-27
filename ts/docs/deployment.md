@@ -35,6 +35,7 @@ Edit `.env` to match your environment:
 | `RATE_LIMIT_MAX_REQUESTS` | `20` | Max requests per window per IP |
 | `PUBLIC_API_URL` | `http://localhost:3001` | API URL the frontend calls (server-side only) |
 | `FRONTEND_PORT` | `3000` | SvelteKit frontend port |
+| `ORIGIN` | _(empty)_ | SvelteKit adapter-node origin — set to the URL users access in the browser (e.g. `http://your-ip:3000`). Prevents CSRF 403 errors caused by `adapter-node` defaulting protocol to `https` |
 | `BUN_PATH` | `bun` | Full path to bun binary (set if bun isn't in PM2's PATH) |
 
 **Finding your bun path:**
@@ -72,6 +73,14 @@ Verify the new build is live by checking for updated asset hashes in the HTML re
 
 ```bash
 curl -s http://localhost:3000 | grep '_app/immutable'
+```
+
+**After changing `.env` config:** Delete and re-launch (restart does not reload env):
+
+```bash
+pm2 delete all
+pm2 start ecosystem.config.cjs
+pm2 flush      # clear stale log artifacts
 ```
 
 ### 5. Verify
@@ -119,10 +128,11 @@ Logs are written to `logs/` in the project root:
 
 Same steps as above. The only differences are in `.env`:
 
-1. Set `PUBLIC_API_URL` to `http://localhost:3001` (frontend calls API server-side, so localhost is correct even on staging)
-2. Set `BUN_PATH` to the bun path on the staging server
-3. Ensure ports 3000 and 3001 are open in the firewall
-4. Run `pm2 save && pm2 startup` on the staging server
+1. **Set `ORIGIN`** to the URL users access the app at, e.g. `http://103.41.206.197:3000`. This is required for SvelteKit's CSRF protection to work over plain HTTP (adapter-node defaults protocol to `https`).
+2. Set `PUBLIC_API_URL` to `http://localhost:3001` (frontend calls API server-side, so localhost is correct even on staging)
+3. Set `BUN_PATH` to the bun path on the staging server
+4. Ensure ports 3000 and 3001 are open in the firewall
+5. Run `pm2 save && pm2 startup` on the staging server
 
 ## Architecture
 
@@ -148,11 +158,18 @@ Common causes:
 - **Module not found**: PM2 is using Node instead of Bun. Ensure `BUN_PATH` in `.env` points to the correct bun binary and `exec_mode: "fork"` is set in `ecosystem.config.cjs`.
 - **Worker init failure**: Tesseract.js needs network access to download language data on first run, or a local `.traineddata` file.
 
+### Frontend returns 403 on form submit (or "Cross-site POST form submissions are forbidden")
+
+The SvelteKit adapter-node defaults protocol to `https` when constructing the request origin. If the `Origin` header sent by the browser (`http://...`) doesn't match the server's computed origin (`https://...`), CSRF protection blocks the request.
+
+**Fix:** Set `ORIGIN` in `.env` to the exact URL users access the app at, e.g. `ORIGIN=http://your-server-ip:3000`.
+
 ### Frontend returns 500 on form submit
 
 The frontend's server-side fetch to the API is failing. Check:
 - Server is running: `curl http://localhost:3001/api/health`
 - `PUBLIC_API_URL` in `.env` is correct
+- **After a config change:** Did you delete and re-launch PM2? `pm2 restart` does **not** reload env vars — use `pm2 delete all && pm2 start ecosystem.config.cjs`
 
 ### Port already in use
 

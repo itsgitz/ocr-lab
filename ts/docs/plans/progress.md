@@ -180,6 +180,11 @@
   - [x] Add `@source "./**/*.{svelte,ts,js}"` to `app.css`
   - [x] Rebuild and restart PM2 frontend process
   - [x] Write troubleshooting doc (`docs/troubleshooting/tailwind-css-not-loading.md`)
+- [x] Fix CSRF 403 on form submit (SvelteKit adapter-node defaults protocol to `https`)
+  - [x] Add `ORIGIN` env var to `.env` (set to `http://your-server-ip:3000`)
+  - [x] Add `ORIGIN` to `.env.example` with documentation
+  - [x] Wire `ORIGIN` through `ecosystem.config.cjs` → frontend process env
+  - [x] Document in `docs/deployment.md` env table, staging checklist, and CSRF troubleshooting section
 
 ### Acceptance Criteria
 
@@ -218,6 +223,7 @@
 | 2026-05-27 | `.env` loading in `ecosystem.config.cjs` (no dotenv) | Lightweight custom parser keeps the config portable across environments without adding a dependency |
 | 2026-05-27 | Project-local `logs/` instead of `/var/log/ocr-lab/` | No sudo required, portable across dev/staging environments |
 | 2026-05-27 | `BUN_PATH` env var for PM2 interpreter | Bun installed per-user (`~/.bun/bin/bun`) isn't in PM2's default PATH; explicit path avoids silent fallback to Node |
+| 2026-05-27 | `ORIGIN` env var for SvelteKit adapter-node | Adapter-node defaults protocol to `https` in `get_origin()`; without `ORIGIN`, CSRF check compares browser's `http://` origin against server's `https://` origin and returns 403. Setting `ORIGIN` to the actual HTTP access URL fixes the mismatch. |
 
 ---
 
