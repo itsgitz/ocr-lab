@@ -153,3 +153,13 @@ bun run start:pm2
 pm2 startup  # follow instructions to enable systemd service
 pm2 save     # save current process list
 ```
+
+### CSS not loading in production
+
+Page renders but has no styles. Dev mode works fine.
+
+**Cause:** Tailwind CSS v4 + SvelteKit needs an explicit `+layout.svelte` with CSS import and `@source` directive in `app.css`.
+
+**Fix:** See `docs/troubleshooting/tailwind-css-not-loading.md`
+
+**Verify:** After rebuild, check `build/client/_app/immutable/assets/*.css` exists.

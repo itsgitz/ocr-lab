@@ -204,6 +204,8 @@
 | 2026-05-27 | IP detection chain: `x-forwarded-for` → `x-real-ip` → `unknown` | Ensures rate limiting works behind reverse proxies that set `x-real-ip` instead of `x-forwarded-for` |
 | 2026-05-27 | OCR worker reinitializes on language change | `initWorker` now terminates and recreates the worker if the requested language differs from the current one |
 | 2026-05-27 | PM2 `exec_mode: "fork"` for server process | PM2 cluster mode uses Node's `cluster` module internally, ignoring the custom `interpreter` field; fork mode is required for Bun |
+| 2026-05-27 | Explicit `+layout.svelte` with `import "../app.css"` | SvelteKit's auto-detection of `src/app.css` is unreliable with `@tailwindcss/vite` plugin in production builds |
+| 2026-05-27 | `@source` directive in `app.css` for Tailwind v4 | `@tailwindcss/vite` auto-detection doesn't find `.svelte` files through SvelteKit's build pipeline; explicit source paths required |
 | 2026-05-27 | `.env` loading in `ecosystem.config.cjs` (no dotenv) | Lightweight custom parser keeps the config portable across environments without adding a dependency |
 | 2026-05-27 | Project-local `logs/` instead of `/var/log/ocr-lab/` | No sudo required, portable across dev/staging environments |
 | 2026-05-27 | `BUN_PATH` env var for PM2 interpreter | Bun installed per-user (`~/.bun/bin/bun`) isn't in PM2's default PATH; explicit path avoids silent fallback to Node |
