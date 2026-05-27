@@ -173,6 +173,14 @@
 - [x] Rate limit IP detection: fallback chain `x-forwarded-for` → `x-real-ip` → `"unknown"`
 - [x] OCR worker: reinitialize worker when language changes (`initWorker` terminates + recreates)
 
+### Post-Deployment Fixes
+
+- [x] Fix Tailwind CSS v4 not loading in production build
+  - [x] Add `+layout.svelte` with explicit `import "../app.css"`
+  - [x] Add `@source "./**/*.{svelte,ts,js}"` to `app.css`
+  - [x] Rebuild and restart PM2 frontend process
+  - [x] Write troubleshooting doc (`docs/troubleshooting/tailwind-css-not-loading.md`)
+
 ### Acceptance Criteria
 
 - [x] App accessible via `http://103.41.206.197:3000`
@@ -206,6 +214,7 @@
 | 2026-05-27 | PM2 `exec_mode: "fork"` for server process | PM2 cluster mode uses Node's `cluster` module internally, ignoring the custom `interpreter` field; fork mode is required for Bun |
 | 2026-05-27 | Explicit `+layout.svelte` with `import "../app.css"` | SvelteKit's auto-detection of `src/app.css` is unreliable with `@tailwindcss/vite` plugin in production builds |
 | 2026-05-27 | `@source` directive in `app.css` for Tailwind v4 | `@tailwindcss/vite` auto-detection doesn't find `.svelte` files through SvelteKit's build pipeline; explicit source paths required |
+| 2026-05-27 | Always `pm2 restart` after `bun run build:frontend` | PM2 keeps the old Node process alive serving stale build artifacts; rebuild alone doesn't update the running app |
 | 2026-05-27 | `.env` loading in `ecosystem.config.cjs` (no dotenv) | Lightweight custom parser keeps the config portable across environments without adding a dependency |
 | 2026-05-27 | Project-local `logs/` instead of `/var/log/ocr-lab/` | No sudo required, portable across dev/staging environments |
 | 2026-05-27 | `BUN_PATH` env var for PM2 interpreter | Bun installed per-user (`~/.bun/bin/bun`) isn't in PM2's default PATH; explicit path avoids silent fallback to Node |

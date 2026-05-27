@@ -58,6 +58,22 @@ bun run build:frontend
 bun run start:pm2
 ```
 
+### Redeploying after changes
+
+After pulling new code and rebuilding, you **must restart the PM2 process** — PM2 keeps the old Node process alive serving stale build artifacts from memory:
+
+```bash
+git pull
+bun run build:frontend
+pm2 restart ocr-lab-frontend
+```
+
+Verify the new build is live by checking for updated asset hashes in the HTML response:
+
+```bash
+curl -s http://localhost:3000 | grep '_app/immutable'
+```
+
 ### 5. Verify
 
 ```bash
@@ -158,8 +174,18 @@ pm2 save     # save current process list
 
 Page renders but has no styles. Dev mode works fine.
 
-**Cause:** Tailwind CSS v4 + SvelteKit needs an explicit `+layout.svelte` with CSS import and `@source` directive in `app.css`.
+**Cause 1 — Stale PM2 process:** PM2 is still running the old build. After rebuilding, restart the process:
 
-**Fix:** See `docs/troubleshooting/tailwind-css-not-loading.md`
+```bash
+bun run build:frontend
+pm2 restart ocr-lab-frontend
+```
 
-**Verify:** After rebuild, check `build/client/_app/immutable/assets/*.css` exists.
+**Cause 2 — Missing Tailwind configuration:** Tailwind CSS v4 + SvelteKit needs an explicit `+layout.svelte` with CSS import and `@source` directive in `app.css`. See `docs/troubleshooting/tailwind-css-not-loading.md`.
+
+**Verify:** Check that `build/client/_app/immutable/assets/*.css` exists, then confirm the HTML response contains a `<link>` to it:
+
+```bash
+curl -s http://localhost:3000 | grep 'stylesheet'
+# Expected: <link href="./_app/immutable/assets/0.<hash>.css" rel="stylesheet">
+```

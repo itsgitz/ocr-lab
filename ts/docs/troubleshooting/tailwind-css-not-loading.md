@@ -76,6 +76,16 @@ grep "stylesheets" packages/frontend/build/server/chunks/0-*.js
 # Expected: stylesheets = ["_app/immutable/assets/0.<hash>.css"]
 ```
 
+**Critical: Restart PM2 after rebuilding.** PM2 keeps the old Node process alive, serving stale build artifacts from memory. Without a restart, the browser still receives the old HTML referencing old (or missing) asset hashes:
+
+```bash
+pm2 restart ocr-lab-frontend
+
+# Verify the new build is live:
+curl -s http://localhost:3000 | grep 'stylesheet'
+# Expected: <link href="./_app/immutable/assets/0.<hash>.css" rel="stylesheet">
+```
+
 ## Why Dev Mode Worked
 
 In development (`bun run dev`), Vite's dev server processes CSS on-demand per request.
@@ -91,6 +101,7 @@ SvelteKit's plugin transforms `.svelte` files before Tailwind sees them.
 | Always create `+layout.svelte` | Explicitly import `app.css` — don't rely on auto-detection |
 | Always add `@source` | Tailwind v4 + SvelteKit needs explicit content paths |
 | Verify build output | Check for `.css` files in `build/client/` after every build config change |
+| Restart PM2 after rebuild | PM2 keeps the old process alive — `pm2 restart ocr-lab-frontend` is required |
 | Dev vs prod parity | CSS issues that only appear in production are common with plugin interactions |
 
 ## Files Changed
