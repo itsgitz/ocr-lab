@@ -12,6 +12,9 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 FROM oven/bun:1 AS builder
 WORKDIR /app
 
+ARG CSRF_TRUSTED_ORIGINS
+ENV CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/frontend/node_modules ./packages/frontend/node_modules
 

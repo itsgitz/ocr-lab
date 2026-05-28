@@ -24,11 +24,15 @@ services:
     build:
       context: .
       dockerfile: packages/frontend/Dockerfile
+      args:
+        - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
     ports:
       - "3000:3000"
     env_file: .env
     environment:
       - PORT=3000
+      - ORIGIN=${ORIGIN}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
     depends_on:
       ocr-lab-server:
         condition: service_healthy
