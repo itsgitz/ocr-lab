@@ -341,6 +341,14 @@
 - [x] Update `+layout.svelte` with branded footer
 - [x] Update `app.html` with Google Fonts preconnect + Inter/JetBrains Mono
 
+### Post-Redesign Fixes
+
+- [x] Fix hero description text wrapping word-by-word into a vertical column
+  - [x] Root cause: Tailwind CSS v4 `max-w-*` utilities resolve to spacing scale (`--spacing-*`), not container widths. `--spacing-lg: 24px` made `max-w-lg` = 24px
+  - [x] Fix: Replace `max-w-lg` with `max-w-[480px]` in `packages/frontend/src/routes/+page.svelte`
+  - [x] Build verified: `.max-w-\[480px\]{max-width:480px}` in compiled CSS
+  - [x] Documented in `docs/troubleshooting/tailwind-css-not-loading.md`
+
 ### Acceptance Criteria
 
 - [x] Page renders with warm cream background, not default white/gray

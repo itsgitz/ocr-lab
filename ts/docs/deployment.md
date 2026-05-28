@@ -214,6 +214,9 @@ pm2 restart ocr-lab-frontend
 
 **Cause 2 — Missing Tailwind configuration:** Tailwind CSS v4 + SvelteKit needs an explicit `+layout.svelte` with CSS import and `@source` directive in `app.css`. See `docs/troubleshooting/tailwind-css-not-loading.md`.
 
+**Cause 3 — Tailwind v4 `max-w-*` utilities resolve to spacing scale:**
+Named `max-w-*` utilities (`max-w-sm`, `max-w-md`, `max-w-lg`, etc.) now resolve to the custom `--spacing-*` scale instead of container widths. With `--spacing-lg: 24px`, `max-w-lg` becomes 24px — causing text to wrap word-by-word. Use arbitrary values like `max-w-[480px]` instead. See `docs/troubleshooting/tailwind-css-not-loading.md` for details.
+
 **Verify:** Check that `build/client/_app/immutable/assets/*.css` exists, then confirm the HTML response contains a `<link>` to it:
 
 ```bash

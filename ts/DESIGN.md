@@ -373,6 +373,8 @@ CursorGothic is licensed. Open-source substitute: **Inter** at weight 400 with l
 - **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.base}` 16px · `{spacing.md}` 20px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 80px.
 - **Section padding:** 80px.
 
+> **⚠️ Tailwind CSS v4 Warning:** Named `max-w-*` utilities (`max-w-sm`, `max-w-md`, `max-w-lg`, etc.) resolve to the `--spacing-*` scale, not container widths. With the custom theme above, `max-w-lg` becomes `24px` — use arbitrary values like `max-w-[480px]` or `max-w-[32rem]` instead. See `docs/troubleshooting/tailwind-css-not-loading.md` for details.
+
 ### Grid & Container
 - Max content width: ~1200px.
 - Editorial body: 12-column grid.

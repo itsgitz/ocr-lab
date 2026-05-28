@@ -94,6 +94,75 @@ HMR. This masks the content detection issue because the dev server has direct ac
 all source files on disk. Production builds go through Vite's optimized pipeline where
 SvelteKit's plugin transforms `.svelte` files before Tailwind sees them.
 
+## Tailwind v4 `max-w-*` utilities resolve to spacing scale (not container widths)
+
+**Date:** 2026-05-28
+**Severity:** Medium — causes extremely narrow text containers
+**Affected:** Any component using named `max-w-*` utilities (`max-w-sm`, `max-w-md`, `max-w-lg`, etc.) with a custom spacing scale
+
+### Symptoms
+
+- Text wraps word-by-word into a single vertical column
+- Paragraphs appear to be ~20–30px wide despite using `max-w-lg` or `max-w-md`
+- The element has `mx-auto` and `text-center` but still looks broken
+
+### Root Cause
+
+In **Tailwind CSS v4**, the `max-w-*` utilities with **named sizes** (`sm`, `md`, `lg`, `xl`, etc.) resolve to the **spacing scale** (`--spacing-*`), not the old container width scale from v3.
+
+With a custom `@theme` that defines spacing tokens (e.g., `--spacing-md: 20px`, `--spacing-lg: 24px`), these utilities produce unexpectedly tiny values:
+
+| Utility | Tailwind v3 | Tailwind v4 (with custom spacing) |
+|---------|-------------|-----------------------------------|
+| `max-w-sm` | `24rem` (384px) | `var(--spacing-sm)` → `12px` |
+| `max-w-md` | `28rem` (448px) | `var(--spacing-md)` → `20px` |
+| `max-w-lg` | `32rem` (512px) | `var(--spacing-lg)` → `24px` |
+| `max-w-xl` | `36rem` (576px) | `var(--spacing-xl)` → `32px` |
+
+### Fix
+
+Use **arbitrary values** instead of named sizes when you need container-like max-widths:
+
+```diff
+- <p class="max-w-lg mx-auto">...
++ <p class="max-w-[480px] mx-auto">...
+```
+
+Or use `rem`-based arbitrary values to match the old v3 behavior:
+
+```html
+<p class="max-w-[32rem] mx-auto">...</p>  <!-- equivalent to old max-w-lg -->
+```
+
+### Verification
+
+Check the compiled CSS to confirm the utility resolves correctly:
+
+```bash
+bun run build:frontend
+grep 'max-w-' packages/frontend/build/client/_app/immutable/assets/*.css
+```
+
+Expected:
+```css
+.max-w-\[480px\]{max-width:480px}
+```
+
+Not:
+```css
+.max-w-lg{max-width:var(--spacing-lg)}  /* 24px — way too narrow */
+```
+
+### Key Takeaway
+
+| | |
+|---|---|
+| Named `max-w-*` | Resolves to `--spacing-*` scale in v4 |
+| Arbitrary `max-w-[…]` | Always resolves to the exact value you specify |
+| Use arbitrary values | When you need container-style widths with a custom spacing theme |
+
+---
+
 ## Key Takeaways
 
 | Aspect | Detail |
@@ -103,6 +172,7 @@ SvelteKit's plugin transforms `.svelte` files before Tailwind sees them.
 | Verify build output | Check for `.css` files in `build/client/` after every build config change |
 | Restart PM2 after rebuild | PM2 keeps the old process alive — `pm2 restart ocr-lab-frontend` is required |
 | Dev vs prod parity | CSS issues that only appear in production are common with plugin interactions |
+| Named `max-w-*` in v4 | Resolves to spacing scale, not container widths — use arbitrary values instead |
 
 ## Files Changed
 
