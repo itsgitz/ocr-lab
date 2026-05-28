@@ -75,19 +75,23 @@ cp .env.docker.example .env
 | `PUBLIC_API_URL` | `http://localhost:3001` | `http://ocr-lab-server:3001` | Frontend container must use the server's **container name**, not `localhost` |
 | `ORIGIN` | `http://<vps-ip>:3000` | `http://localhost:3000` (local) or `http://<vps-ip>:3000` (remote) | Same CSRF rule applies |
 | `BUN_PATH` | `/home/user/.bun/bin/bun` | *(omit)* | Bun is already in `PATH` inside `oven/bun` image |
+| `BODY_SIZE_LIMIT` | *(not set — bare-metal PM2 runs server directly)* | `Infinity` | adapter-node defaults to 512KB; must allow large image pass-through |
+| `PORT` | `3001` in `.env` | Overridden per-service in compose | Both services read `PORT`; compose `environment:` resolves the conflict |
 
 ### Full variable reference
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PORT` | `3001` | Hono API bind port |
+| `PORT` | `3001` | Hono API bind port. **Important:** adapter-node also reads `PORT` — see PORT conflict note below |
 | `HOST` | `0.0.0.0` | Bind address (keep `0.0.0.0` inside container) |
 | `OCR_DEFAULT_LANG` | `eng` | Default Tesseract language |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window in ms |
 | `RATE_LIMIT_MAX_REQUESTS` | `20` | Max requests per IP per window |
 | `PUBLIC_API_URL` | `http://ocr-lab-server:3001` | Server-side API fetch URL (use container name). **Note:** This URL is only resolvable from the frontend container via Docker DNS. Client-side JavaScript in the browser cannot resolve Docker service names and will fail if it attempts to use this URL directly. Keep all API calls server-side (SvelteKit form actions, server hooks). |
-| `FRONTEND_PORT` | `3000` | SvelteKit SSR bind port |
 | `ORIGIN` | `http://localhost:3000` | SvelteKit adapter-node origin — prevents CSRF 403 |
+| `BODY_SIZE_LIMIT` | `512KB` | adapter-node request body limit. **Must set to `Infinity` or `10485760`** — default 512KB rejects image uploads before they reach the API |
+
+> **PORT conflict:** Both the server (`packages/server/src/index.ts`) and the frontend (`adapter-node`) read the `PORT` environment variable. Since both services share the same `.env` file via `env_file:`, you **must** override `PORT` per-service in `docker-compose.yml` using the `environment:` key (see compose spec below). Do NOT rely on `FRONTEND_PORT` — adapter-node does not read it.
 
 ---
 
@@ -105,12 +109,17 @@ RATE_LIMIT_MAX_REQUESTS=20
 
 # Frontend (SvelteKit)
 PUBLIC_API_URL=http://ocr-lab-server:3001
-FRONTEND_PORT=3000
+
+# adapter-node body size limit — default is 512KB which rejects image uploads.
+# Set to Infinity to let the backend (10MB limit) handle validation.
+BODY_SIZE_LIMIT=Infinity
 
 # SvelteKit adapter-node origin — must match the URL users access in the browser
 # Prevents CSRF 403 errors. Replace with your server IP or domain.
 ORIGIN=http://REPLACE_WITH_YOUR_IP:3000
 ```
+
+> **Note:** `PORT` for each service is set via `environment:` in `docker-compose.yml`, not in this file. This avoids the conflict where both services read the same `PORT` variable.
 
 ---
 
@@ -128,8 +137,36 @@ ORIGIN=http://REPLACE_WITH_YOUR_IP:3000
 | `deps` | `oven/bun:1` | Install all workspace dependencies |
 | `production` | `oven/bun:1` | Copy deps + source; run server |
 
+```dockerfile
+# packages/server/Dockerfile
+FROM oven/bun:1 AS deps
+WORKDIR /app
+# Copy workspace root manifests first for layer caching
+COPY package.json bun.lock ./
+COPY packages/server/package.json packages/server/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/frontend/package.json packages/frontend/package.json
+# Install all workspace deps (bun needs full workspace structure)
+RUN bun install --frozen-lockfile
+
+FROM oven/bun:1 AS production
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules 2>/dev/null || true
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules 2>/dev/null || true
+# Copy source code
+COPY packages/server/ packages/server/
+COPY packages/shared/ packages/shared/
+COPY package.json ./
+
+USER bun
+EXPOSE 3001
+CMD ["bun", "run", "packages/server/src/index.ts"]
+```
+
 **Key decisions:**
 - Build context is the **monorepo root** (set in `docker-compose.yml`) so `packages/shared/` is accessible.
+- All `packages/*/package.json` files are copied before `bun install` to enable workspace resolution and Docker layer caching.
 - Tesseract.js downloads language data from the jsdelivr CDN at runtime (requires outbound internet access).
 - Runs as non-root user (`bun`) for security.
 - Exposes port `3001`.
@@ -148,8 +185,40 @@ ORIGIN=http://REPLACE_WITH_YOUR_IP:3000
 | `builder` | `oven/bun:1` | Run `bun run build:frontend` → produces `packages/frontend/build/` |
 | `production` | `node:20-alpine` | Copy only compiled build output; run Node |
 
+```dockerfile
+# packages/frontend/Dockerfile
+FROM oven/bun:1 AS deps
+WORKDIR /app
+COPY package.json bun.lock ./
+COPY packages/server/package.json packages/server/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/frontend/package.json packages/frontend/package.json
+RUN bun install --frozen-lockfile
+
+FROM oven/bun:1 AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/frontend/node_modules ./packages/frontend/node_modules 2>/dev/null || true
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules 2>/dev/null || true
+# Copy all source needed for the build
+COPY packages/frontend/ packages/frontend/
+COPY packages/shared/ packages/shared/
+COPY package.json tsconfig.json ./
+RUN bun run build:frontend
+
+FROM node:20-alpine AS production
+WORKDIR /app
+# Copy only the self-contained build output
+COPY --from=builder /app/packages/frontend/build ./build
+
+USER node
+EXPOSE 3000
+CMD ["node", "build/index.js"]
+```
+
 **Key decisions:**
 - Only the compiled `packages/frontend/build/` directory is copied to the final stage — source files and devDependencies are excluded. The build output is fully self-contained.
+- The `tsconfig.json` is copied to the builder stage because `packages/shared` uses path aliases that may be resolved during build.
 - Runs as non-root user (`node`) for security.
 - Exposes port `3000`.
 
@@ -166,6 +235,8 @@ services:
     ports:
       - "3001:3001"
     env_file: .env
+    environment:
+      - PORT=3001                       # explicit override — .env is shared
     networks:
       - ocr-net
     restart: unless-stopped
@@ -187,6 +258,9 @@ services:
     ports:
       - "3000:3000"
     env_file: .env
+    environment:
+      - PORT=3000                       # adapter-node reads PORT, not FRONTEND_PORT
+      - BODY_SIZE_LIMIT=Infinity        # allow large image uploads (default 512KB)
     depends_on:
       ocr-lab-server:
         condition: service_healthy      # wait for /api/health to pass
@@ -377,13 +451,60 @@ Without this, you may see `exec format error` when running the image on a differ
 
 ## Staging Checklist
 
-- [ ] `PUBLIC_API_URL=http://ocr-lab-server:3001` (container name, not localhost)
-- [ ] `ORIGIN=http://<staging-ip>:3000` (prevents CSRF 403)
+- [ ] `PUBLIC_API_URL=http://ocr-lab-server:3001` in `.env` (container name, not localhost)
+- [ ] `ORIGIN=http://<staging-ip>:3000` in `.env` (prevents CSRF 403)
+- [ ] `PORT` overridden per-service in `docker-compose.yml` (`3001` for server, `3000` for frontend)
+- [ ] `BODY_SIZE_LIMIT=Infinity` set for frontend container
 - [ ] Ports 3000 and 3001 open in firewall / security group
 - [ ] `docker compose up --build -d` completes without error
 - [ ] `docker compose ps` shows both services as `healthy` / `running`
 - [ ] `curl http://localhost:3001/api/health` returns `{"status":"ok","workerReady":true}`
-- [ ] Upload test image at `http://<staging-ip>:3000` and confirm OCR result
+- [ ] Upload a **large** test image (>512KB) at `http://<staging-ip>:3000` and confirm OCR result (validates BODY_SIZE_LIMIT)
+- [ ] Upload test image with non-English language to confirm Tesseract CDN access works
+
+---
+
+## Known Gotchas
+
+### 1. PORT variable conflict
+
+Both services read `PORT` from the environment. adapter-node (frontend) reads `PORT` to decide which port to listen on — it does **not** read `FRONTEND_PORT`. Since both services share the same `.env` file, you must override `PORT` per-service via `environment:` in `docker-compose.yml`.
+
+**Symptom if missed:** Frontend starts on port 3001 (same as server), or server starts on 3000.
+
+### 2. BODY_SIZE_LIMIT default (512KB)
+
+adapter-node defaults to a 512KB body size limit. The OCR server accepts 10MB images, but if the frontend rejects the upload first, users see a generic error.
+
+**Symptom if missed:** Large image uploads fail with a 413 error from the frontend container, never reaching the backend.
+
+**Fix:** Set `BODY_SIZE_LIMIT=Infinity` in the frontend container environment (let the backend enforce the 10MB limit via `maxRequestBodySize` and the `validateImage` middleware).
+
+### 3. Bun workspace resolution during Docker build
+
+`bun install` requires ALL `packages/*/package.json` files to be present — even packages you're not building — because the root `package.json` declares `"packages": ["packages/*"]` as workspaces. If any workspace manifest is missing, `bun install` fails.
+
+**Symptom if missed:** `bun install --frozen-lockfile` exits with "workspace package not found" error.
+
+### 4. Healthcheck with top-level await
+
+The healthcheck command uses `bun -e` with top-level await syntax. This works in `oven/bun:1` but may confuse some Docker/compose versions that incorrectly parse the CMD array. If the healthcheck fails unexpectedly, verify with:
+
+```bash
+docker compose exec ocr-lab-server bun -e "const r = await fetch('http://localhost:3001/api/health'); if(!r.ok) process.exit(1)"
+```
+
+**Alternative:** Install `curl` in the server image and use:
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+```
+
+### 5. Tesseract.js CDN access
+
+The server container must have outbound internet access to `cdn.jsdelivr.net` on first OCR request (or startup). Language data (~5MB per language) is downloaded and cached in memory.
+
+**Symptom if missed:** First OCR request hangs or times out with a network error.
 
 ---
 
