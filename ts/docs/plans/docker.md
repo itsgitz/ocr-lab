@@ -89,6 +89,7 @@ cp .env.docker.example .env
 | `RATE_LIMIT_MAX_REQUESTS` | `20` | Max requests per IP per window |
 | `PUBLIC_API_URL` | `http://ocr-lab-server:3001` | Server-side API fetch URL (use container name). **Note:** This URL is only resolvable from the frontend container via Docker DNS. Client-side JavaScript in the browser cannot resolve Docker service names and will fail if it attempts to use this URL directly. Keep all API calls server-side (SvelteKit form actions, server hooks). |
 | `ORIGIN` | `http://localhost:3000` | SvelteKit adapter-node origin — prevents CSRF 403 |
+| `CSRF_TRUSTED_ORIGINS` | _(empty)_ | Comma-separated list of additional origins in SvelteKit's `csrf.trustedOrigins`. Any origin in this list passes the CSRF check even if it doesn't match `ORIGIN`. Passed as a Docker build arg so it's available when `svelte.config.js` runs during `bun run build:frontend`. Example: `http://localhost:3000,http://127.0.0.1:3000,http://<vps-ip>:3000` |
 | `BODY_SIZE_LIMIT` | `512KB` | adapter-node request body limit. **Must set to `Infinity` or `10485760`** — default 512KB rejects image uploads before they reach the API |
 
 > **PORT conflict:** Both the server (`packages/server/src/index.ts`) and the frontend (`adapter-node`) read the `PORT` environment variable. Since both services share the same `.env` file via `env_file:`, the frontend overrides `PORT=3000` in its `environment:` block. The server uses `.env`'s `PORT=3001` directly, so no override is needed there. Do NOT rely on `FRONTEND_PORT` — adapter-node does not read it.
@@ -117,6 +118,10 @@ BODY_SIZE_LIMIT=Infinity
 # SvelteKit adapter-node origin — must match the URL users access in the browser
 # Prevents CSRF 403 errors. Replace with your server IP or domain.
 ORIGIN=http://REPLACE_WITH_YOUR_IP:3000
+
+# SvelteKit CSRF trusted origins — comma-separated list of allowed browser origins
+# Passed as a Docker build arg to be baked into the SvelteKit build.
+CSRF_TRUSTED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://REPLACE_WITH_YOUR_IP:3000
 ```
 
 > **Note:** `PORT` is set via `environment:` in `docker-compose.yml` for the frontend service (overriding `.env`'s `PORT=3001`). The server reads `PORT=3001` directly from `.env`. All other variables (`BODY_SIZE_LIMIT`, `ORIGIN`, etc.) are sourced from `.env` via `env_file:` — no duplication needed.
@@ -205,6 +210,9 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 
 FROM oven/bun:1 AS builder
 WORKDIR /app
+# Accept build-time env var for CSRF trusted origins (baked into svelte.config.js)
+ARG CSRF_TRUSTED_ORIGINS
+ENV CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
 # Copy deps from deps stage — all directories exist after bun install
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/frontend/node_modules ./packages/frontend/node_modules
@@ -269,11 +277,15 @@ services:
     build:
       context: .                        # monorepo root
       dockerfile: packages/frontend/Dockerfile
+      args:
+        - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
     ports:
       - "3000:3000"
     env_file: .env
     environment:
       - PORT=3000                       # adapter-node reads PORT, not FRONTEND_PORT
+      - ORIGIN=${ORIGIN}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
     depends_on:
       ocr-lab-server:
         condition: service_healthy      # wait for /api/health to pass
@@ -475,6 +487,7 @@ Without this, you may see `exec format error` when running the image on a differ
 
 - [ ] `PUBLIC_API_URL=http://ocr-lab-server:3001` in `.env` (container name, not localhost)
 - [ ] `ORIGIN=http://<staging-ip>:3000` in `.env` (prevents CSRF 403)
+- [ ] `CSRF_TRUSTED_ORIGINS` set in `.env` includes all access URLs (e.g. `http://localhost:3000,http://<staging-ip>:3000`)
 - [ ] `PORT=3000` set in frontend `environment:` in `docker-compose.yml` (server reads `PORT=3001` from `.env`)
 - [ ] `BODY_SIZE_LIMIT=Infinity` in `.env` (passed to both services via `env_file:`)
 - [ ] Ports 3000 and 3001 open in firewall / security group
@@ -487,6 +500,18 @@ Without this, you may see `exec format error` when running the image on a differ
 ---
 
 ## Known Gotchas
+
+### 0. CSRF_TRUSTED_ORIGINS must be a build arg, not just runtime env
+
+`csrf.trustedOrigins` is configured in `svelte.config.js` and gets baked into the SvelteKit build output at build time. Setting `CSRF_TRUSTED_ORIGINS` as a runtime environment variable (via `environment:` in `docker-compose.yml`) alone is **not sufficient** — the Dockerfile must also pass it as a build arg (`ARG` + `ENV`) so it's available during `bun run build:frontend`.
+
+**Symptom if missed:** Even though `CSRF_TRUSTED_ORIGINS` is set at runtime, `csrf.trustedOrigins` remains `[]` and the CSRF error persists.
+
+**Verification:** Check the built output:
+```bash
+grep -o 'csrf_trusted_origins:\[[^\]]*\]' packages/frontend/build/server/index.js
+# Expected: csrf_trusted_origins:["http://localhost:3000","http://127.0.0.1:3000","http://103.41.206.197:3000"]
+```
 
 ### 1. PORT variable conflict
 

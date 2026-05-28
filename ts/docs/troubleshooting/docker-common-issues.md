@@ -29,10 +29,18 @@ Use the Docker service name (`ocr-lab-server`) as the hostname. Docker's interna
 - `docker compose logs ocr-lab-frontend` shows `Cross-site POST form submissions are forbidden`
 
 **Cause:**  
-SvelteKit `adapter-node` defaults the expected origin to `https://` when `ORIGIN` is not set. The browser sends `http://`, causing a mismatch.
+SvelteKit adapter-node CSRF check compares the browser's `Origin` header against the `ORIGIN` env var. If they don't match and the origin isn't in `csrf.trustedOrigins` (baked at build time), the POST is rejected with 403.
 
-**Fix:**  
-Set `ORIGIN` to the URL users actually access the app from:
+Common scenarios:
+1. `ORIGIN` is not set — adapter-node defaults to `https://` while the browser sends `http://`.
+2. `ORIGIN` is `http://localhost:3000` but the browser accesses via LAN IP (e.g. `http://192.168.1.50:3000`).
+3. `CSRF_TRUSTED_ORIGINS` was set at runtime but not passed as a build arg — the baked `trustedOrigins` array remains empty.
+
+**Fix — two layers of defense:**
+
+### Layer 1: Set `ORIGIN` (runtime)
+
+Set `ORIGIN` in `.env` to the URL users actually access the app from:
 
 ```env
 # Local development
@@ -42,7 +50,65 @@ ORIGIN=http://localhost:3000
 ORIGIN=http://103.41.206.197:3000
 ```
 
-This is the same fix as in the PM2 deployment. See also: [deployment.md](../deployment.md).
+### Layer 2: Set `CSRF_TRUSTED_ORIGINS` (build-time)
+
+Set `CSRF_TRUSTED_ORIGINS` in `.env` and ensure it's passed as a Docker build arg in the frontend `docker-compose.yml` section:
+
+```yaml
+build:
+  args:
+    - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
+```
+
+The Dockerfile's builder stage must accept it:
+```dockerfile
+ARG CSRF_TRUSTED_ORIGINS
+ENV CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
+```
+
+Example `.env` value:
+```env
+CSRF_TRUSTED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://103.41.206.197:3000
+```
+
+### Verify the fix
+
+Check the baked `csrf.trustedOrigins` in the production image:
+
+```bash
+docker compose exec ocr-lab-frontend node -e "
+const fs = require('fs');
+const content = fs.readFileSync('build/server/index.js', 'utf-8');
+const match = content.match(/csrf_trusted_origins:\s*(\[[^\]]*\])/);
+console.log(match ? match[1] : 'NOT FOUND');
+"
+```
+
+Expected output:
+```
+["http://localhost:3000", "http://127.0.0.1:3000", "http://103.41.206.197:3000"]
+```
+
+If the array is empty `[]`, the build arg wasn't passed correctly. Rebuild with `--no-cache` and verify the arg is present in `docker-compose.yml`.
+
+### Test CSRF is working
+
+```bash
+# Should pass (trusted origin)
+curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/ \
+  -H "Origin: http://103.41.206.197:3000" \
+  -F "image=@/dev/null;filename=test.png;type=image/png" \
+  -F "language=eng"
+# Expected: 200 (fail from form validation, not CSRF)
+
+# Should block (untrusted origin)  
+curl -s -X POST http://localhost:3000/ \
+  -H "Origin: https://evil.com" \
+  -F "image=@/dev/null;filename=test.png;type=image/png"
+# Expected: Cross-site POST form submissions are forbidden
+```
+
+See also: [deployment.md](../deployment.md), [Docker deployment guide](../plans/docker.md).
 
 ---
 

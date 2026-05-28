@@ -14,7 +14,7 @@
 | 2. OCR API | ✅ Complete | 2026-05-27 | 2026-05-27 | POST /api/ocr, validation middleware, rate limiting, error handling |
 | 3. SvelteKit Frontend | ✅ Complete | 2026-05-27 | 2026-05-27 | Tailwind v4, Svelte 5 runes, progressive enhancement, 29 tests all passing |
 | 4. Production & Polish | ✅ Complete | 2026-05-27 | 2026-05-27 | PM2 deployment verified on VPS (103.41.206.197), deployment docs written |
-| 5. Docker Containerization | ✅ Complete | 2026-05-28 | 2026-05-28 | Multi-stage Dockerfiles, BuildKit caching, healthcheck w/ workerReady validation, Compose orchestration, all verified and cleaned up |
+| 5. Docker Containerization | ✅ Complete | 2026-05-28 | 2026-05-28 | Multi-stage Dockerfiles, BuildKit caching, healthcheck w/ workerReady validation, Compose orchestration, CSRF fix w/ `csrf.trustedOrigins`, all verified and cleaned up |
 
 ---
 
@@ -277,6 +277,18 @@
   - [x] `docker compose down --rmi all` — images, containers, network removed
   - [x] Restore original `.env` from backup
 
+### Post-Docker Fixes
+
+- [x] Fix CSRF 403 on cross-site POST form submissions when accessing via LAN / VPS IP
+  - [x] Root cause: `ORIGIN=http://localhost:3000` but browser sends `Origin: http://103.41.206.197:3000`; `csrf.trustedOrigins` was empty, so origins mismatch triggered 403
+  - [x] Add `csrf.trustedOrigins` to `svelte.config.js` reading `CSRF_TRUSTED_ORIGINS` env var at build time
+  - [x] Add `ARG CSRF_TRUSTED_ORIGINS` + `ENV` to `packages/frontend/Dockerfile` builder stage
+  - [x] Add build args + runtime env to `docker-compose.yml` frontend service
+  - [x] Update `.env` with `ORIGIN=http://103.41.206.197:3000` and `CSRF_TRUSTED_ORIGINS` (localhost + 127.0.0.1 + VPS IP)
+  - [x] Update `.env.docker.example` with `CSRF_TRUSTED_ORIGINS` placeholder
+  - [x] Verify: form POST from trusted origin → 200; from untrusted origin → 403
+  - [x] Clean up images after verification
+
 ### Acceptance Criteria
 
 - [x] Both images build without errors
@@ -296,6 +308,7 @@
 | 2026-05-28 | `oven/bun:1` (Debian) not Alpine for server | Tesseract.js WASM compatibility is guaranteed on Debian; Alpine/musl may have edge cases |
 | 2026-05-28 | `node:20-alpine` for frontend production | adapter-node output is plain Node.js; no Bun needed at runtime; Alpine keeps image slim |
 | 2026-05-28 | No `COPY` for `packages/shared/node_modules` | Shared package has zero npm deps; `bun install` never creates this directory; COPY would fail with "not found" |
+| 2026-05-28 | `CSRF_TRUSTED_ORIGINS` as Docker build arg for SvelteKit `csrf.trustedOrigins` | `svelte.config.js` runs at build time; runtime env vars alone aren't sufficient. Must pass `ARG` + `ENV` in Dockerfile builder stage and wire through `docker-compose.yml` build args. Both build-time (baked) and runtime (`ORIGIN`) approaches used for defense in depth. |
 
 ---
 

@@ -36,6 +36,7 @@ Edit `.env` to match your environment:
 | `PUBLIC_API_URL` | `http://localhost:3001` | API URL the frontend calls (server-side only) |
 | `FRONTEND_PORT` | `3000` | SvelteKit frontend port |
 | `ORIGIN` | _(empty)_ | SvelteKit adapter-node origin — set to the URL users access in the browser (e.g. `http://your-ip:3000`). Prevents CSRF 403 errors caused by `adapter-node` defaulting protocol to `https` |
+| `CSRF_TRUSTED_ORIGINS` | _(empty)_ | Comma-separated list of additional origins to allow via SvelteKit's `csrf.trustedOrigins` config. Any origin in this list will pass the CSRF check even if it doesn't match `ORIGIN`. Useful when the app is accessed from multiple addresses (e.g. `http://localhost:3000,http://127.0.0.1:3000,http://<vps-ip>:3000`). **Must be set at build time** (baked into the SvelteKit build). |
 | `BUN_PATH` | `bun` | Full path to bun binary (set if bun isn't in PM2's PATH) |
 
 **Finding your bun path:**
@@ -129,10 +130,11 @@ Logs are written to `logs/` in the project root:
 Same steps as above. The only differences are in `.env`:
 
 1. **Set `ORIGIN`** to the URL users access the app at, e.g. `http://103.41.206.197:3000`. This is required for SvelteKit's CSRF protection to work over plain HTTP (adapter-node defaults protocol to `https`).
-2. Set `PUBLIC_API_URL` to `http://localhost:3001` (frontend calls API server-side, so localhost is correct even on staging)
-3. Set `BUN_PATH` to the bun path on the staging server
-4. Ensure ports 3000 and 3001 are open in the firewall
-5. Run `pm2 save && pm2 startup` on the staging server
+2. **Set `CSRF_TRUSTED_ORIGINS`** to include all valid access URLs (e.g. `http://localhost:3000,http://127.0.0.1:3000,http://103.41.206.197:3000`). **Must be set at build time** — run `CSRF_TRUSTED_ORIGINS=... bun run build:frontend`.
+3. Set `PUBLIC_API_URL` to `http://localhost:3001` (frontend calls API server-side, so localhost is correct even on staging)
+4. Set `BUN_PATH` to the bun path on the staging server
+5. Ensure ports 3000 and 3001 are open in the firewall
+6. Run `pm2 save && pm2 startup` on the staging server
 
 ## Architecture
 
@@ -160,9 +162,21 @@ Common causes:
 
 ### Frontend returns 403 on form submit (or "Cross-site POST form submissions are forbidden")
 
-The SvelteKit adapter-node defaults protocol to `https` when constructing the request origin. If the `Origin` header sent by the browser (`http://...`) doesn't match the server's computed origin (`https://...`), CSRF protection blocks the request.
+SvelteKit's adapter-node CSRF check compares the browser's `Origin` header against the `ORIGIN` env var. If they don't match and the origin isn't in `csrf.trustedOrigins`, the POST is rejected with 403.
 
-**Fix:** Set `ORIGIN` in `.env` to the exact URL users access the app at, e.g. `ORIGIN=http://your-server-ip:3000`.
+The most common scenario: `ORIGIN` is set to `http://localhost:3000` but the browser accesses the app via a LAN IP (e.g. `http://192.168.1.50:3000`).
+
+**Fix — two layers of defense:**
+
+1. **Set `ORIGIN`** in `.env` to the exact URL users access the app at, e.g. `ORIGIN=http://your-server-ip:3000`. This is the primary origin the server expects.
+
+2. **Set `CSRF_TRUSTED_ORIGINS`** at build time to allow additional origins. This is read by `svelte.config.js` and baked into `csrf.trustedOrigins` — any origin in this list will pass the CSRF check even without matching `ORIGIN`:
+
+   ```bash
+   CSRF_TRUSTED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://your-server-ip:3000" bun run build:frontend
+   ```
+
+   This ensures the app works regardless of which URL users access it from, without disabling CSRF protection for untrusted origins.
 
 ### Frontend returns 500 on form submit
 
