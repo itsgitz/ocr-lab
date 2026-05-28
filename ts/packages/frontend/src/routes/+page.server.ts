@@ -26,6 +26,7 @@ export const actions = {
       const result = await processOCR(image, language);
       return { result, language };
     } catch (err) {
+      console.error("OCR request failed:", err);
       const message =
         err instanceof Error ? err.message : "OCR processing failed";
       return fail(500, { error: message, language });

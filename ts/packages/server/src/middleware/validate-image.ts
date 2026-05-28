@@ -1,9 +1,10 @@
 import type { MiddlewareHandler } from "hono";
-import { ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE } from "shared";
+import { ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, OCR_LANGUAGES } from "shared";
 
 type Env = {
   Variables: {
     validatedFile: File;
+    language: string;
   };
 };
 
@@ -24,7 +25,11 @@ export function validateImage(): MiddlewareHandler<Env> {
       return c.json({ error: "File too large" }, 413);
     }
 
+    const langParam = formData.get("language") as string | null;
+    const language = langParam && langParam in OCR_LANGUAGES ? langParam : "eng";
+
     c.set("validatedFile", file);
+    c.set("language", language);
     await next();
   };
 }

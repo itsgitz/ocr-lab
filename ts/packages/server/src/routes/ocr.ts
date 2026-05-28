@@ -3,11 +3,11 @@ import { rateLimit } from "../middleware/rate-limit";
 import { validateImage } from "../middleware/validate-image";
 import { recognizeImage } from "../services/ocr";
 import type { OCRLanguage } from "shared";
-import { OCR_LANGUAGES } from "shared";
 
 type Env = {
   Variables: {
     validatedFile: File;
+    language: string;
   };
 };
 
@@ -21,14 +21,13 @@ ocr.use("/api/ocr", validateImage());
 
 ocr.post("/api/ocr", async (c) => {
   const file = c.get("validatedFile");
-  const formData = await c.req.formData();
-  const langParam = formData.get("language") as string | null;
-  const lang: string = langParam && langParam in OCR_LANGUAGES ? langParam : "eng";
+  const lang = c.get("language");
 
   try {
     const result = await recognizeImage(file, lang as OCRLanguage);
     return c.json(result);
-  } catch {
+  } catch (err) {
+    console.error("OCR processing failed:", err);
     return c.json({ error: "OCR processing failed" }, 500);
   }
 });
