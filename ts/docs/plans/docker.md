@@ -54,7 +54,8 @@ ts/
 │   └── frontend/
 │       └── Dockerfile            # Multi-stage: deps → build → production
 └── docs/
-    └── docker.md                 # This guide
+    └── plans/
+        └── docker.md             # This guide
 ```
 
 ---
@@ -84,9 +85,32 @@ cp .env.docker.example .env
 | `OCR_DEFAULT_LANG` | `eng` | Default Tesseract language |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window in ms |
 | `RATE_LIMIT_MAX_REQUESTS` | `20` | Max requests per IP per window |
-| `PUBLIC_API_URL` | `http://ocr-lab-server:3001` | Server-side API fetch URL (use container name) |
+| `PUBLIC_API_URL` | `http://ocr-lab-server:3001` | Server-side API fetch URL (use container name). **Note:** This URL is only resolvable from the frontend container via Docker DNS. Client-side JavaScript in the browser cannot resolve Docker service names and will fail if it attempts to use this URL directly. Keep all API calls server-side (SvelteKit form actions, server hooks). |
 | `FRONTEND_PORT` | `3000` | SvelteKit SSR bind port |
 | `ORIGIN` | `http://localhost:3000` | SvelteKit adapter-node origin — prevents CSRF 403 |
+
+---
+
+## `.env.docker.example` Template
+
+Create `.env.docker.example` with the following contents:
+
+```env
+# Server
+PORT=3001
+HOST=0.0.0.0
+OCR_DEFAULT_LANG=eng
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX_REQUESTS=20
+
+# Frontend (SvelteKit)
+PUBLIC_API_URL=http://ocr-lab-server:3001
+FRONTEND_PORT=3000
+
+# SvelteKit adapter-node origin — must match the URL users access in the browser
+# Prevents CSRF 403 errors. Replace with your server IP or domain.
+ORIGIN=http://REPLACE_WITH_YOUR_IP:3000
+```
 
 ---
 
@@ -102,11 +126,11 @@ cp .env.docker.example .env
 | Stage | Base image | Purpose |
 |-------|-----------|---------|
 | `deps` | `oven/bun:1` | Install all workspace dependencies |
-| `production` | `oven/bun:1` | Copy deps + source + trained data; run server |
+| `production` | `oven/bun:1` | Copy deps + source; run server |
 
 **Key decisions:**
-- Build context is the **monorepo root** (set in `docker-compose.yml`) so `packages/shared/` and Tesseract trained data files are accessible.
-- `eng.traineddata` and `fra.traineddata` are copied from the repo root into `/app/` inside the image.
+- Build context is the **monorepo root** (set in `docker-compose.yml`) so `packages/shared/` is accessible.
+- Tesseract.js downloads language data from the jsdelivr CDN at runtime (requires outbound internet access).
 - Runs as non-root user (`bun`) for security.
 - Exposes port `3001`.
 
@@ -122,10 +146,10 @@ cp .env.docker.example .env
 |-------|-----------|---------|
 | `deps` | `oven/bun:1` | Install all workspace dependencies |
 | `builder` | `oven/bun:1` | Run `bun run build:frontend` → produces `packages/frontend/build/` |
-| `production` | `node:20-alpine` | Copy only build output + production node_modules; run Node |
+| `production` | `node:20-alpine` | Copy only compiled build output; run Node |
 
 **Key decisions:**
-- Only the compiled `packages/frontend/build/` directory and necessary `node_modules` are copied to the final stage — source files are excluded.
+- Only the compiled `packages/frontend/build/` directory is copied to the final stage — source files and devDependencies are excluded. The build output is fully self-contained.
 - Runs as non-root user (`node`) for security.
 - Exposes port `3000`.
 
@@ -146,11 +170,15 @@ services:
       - ocr-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:3001/api/health'); if(!r.ok) process.exit(1)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   ocr-lab-frontend:
     build:
@@ -172,7 +200,7 @@ networks:
 ```
 
 **Why `context: .`?**  
-Both Dockerfiles need access to the full monorepo (shared package, trained data files, `bun.lock`). Setting `context` to the repo root ensures `COPY` instructions can reach everything.
+Both Dockerfiles need access to the full monorepo (shared package, `bun.lock`). Setting `context` to the repo root ensures `COPY` instructions can reach everything.
 
 ---
 
@@ -208,7 +236,7 @@ docs/
 README*
 ```
 
-> **Do NOT exclude `*.traineddata`** — Tesseract trained data files must be available in the build context so the server Dockerfile can copy them into the image.
+> **Note:** Tesseract trained data files are not needed in the Docker build context. Tesseract.js downloads language data from the jsdelivr CDN at runtime.
 
 ---
 
@@ -319,17 +347,15 @@ The frontend container will not start until the server reports `healthy`. This p
 
 ---
 
-## Tesseract Trained Data
+## Tesseract Language Data
 
-The files `eng.traineddata` (5 MB) and `fra.traineddata` (1.2 MB) live at the monorepo root and must be copied into the server image.
+Tesseract.js downloads language data files from the [jsdelivr CDN](https://cdn.jsdelivr.net/npm/@tesseract.js-data/) at runtime when a language is first requested. This approach:
 
-**Why they are not downloaded at runtime:**
-- Eliminates network dependency during container startup
-- Guarantees reproducible builds
-- Avoids Tesseract.js CDN failures in restricted environments
+- **Simplifies deployment** — no need to manage `.traineddata` files
+- **Supports all 7 languages** — English, Chinese (Simplified), Japanese, Korean, French, German, Spanish
+- **Requires outbound internet** — the Docker container must have access to `cdn.jsdelivr.net`
 
-**Adding more languages:**  
-Download additional `.traineddata` files from the [Tesseract tessdata repository](https://github.com/tesseract-ocr/tessdata) into the repo root, add the language code to `OCR_LANGUAGES` in `packages/shared/src/types.ts`, and rebuild the server image.
+If your environment restricts internet access, consider downloading `.traineddata` files during Docker build and configuring `Tesseract.js` with a custom `langPath`.
 
 ---
 
@@ -363,6 +389,6 @@ Without this, you may see `exec format error` when running the image on a differ
 
 ## See Also
 
-- [Deployment guide (PM2)](./deployment.md) — bare-metal setup reference
-- [Docker common issues](./troubleshooting/docker-common-issues.md) — troubleshooting reference
-- [Tailwind CSS production issue](./troubleshooting/tailwind-css-not-loading.md) — applies to both PM2 and Docker
+- [Deployment guide (PM2)](../deployment.md) — bare-metal setup reference
+- [Docker common issues](../troubleshooting/docker-common-issues.md) — troubleshooting reference
+- [Tailwind CSS production issue](../troubleshooting/tailwind-css-not-loading.md) — applies to both PM2 and Docker

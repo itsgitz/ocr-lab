@@ -46,23 +46,23 @@ This is the same fix as in the PM2 deployment. See also: [deployment.md](../depl
 
 ---
 
-## 3. Tesseract trained data not found
+## 3. OCR requests fail or return errors
 
 **Symptoms:**
-- Server starts but OCR requests fail with an error about missing language data
-- `docker compose logs ocr-lab-server` shows `Error: Could not initialize tesseract` or file not found
+- Server starts but OCR requests fail with timeouts or network errors
+- `docker compose logs ocr-lab-server` shows errors about downloading language data
 
 **Cause:**  
-`*.traineddata` files were accidentally excluded from the Docker build context (e.g., added to `.dockerignore`).
+Tesseract.js downloads language data from the jsdelivr CDN at runtime. The Docker container lacks outbound internet access or the CDN is unreachable.
 
 **Fix:**  
-Ensure `.dockerignore` does **not** contain `*.traineddata`. The files `eng.traineddata` and `fra.traineddata` at the monorepo root must be available when Docker builds the server image.
-
-Verify they are accessible to the build:
+Verify the container has outbound internet access:
 ```bash
-docker compose build --progress=plain ocr-lab-server 2>&1 | grep traineddata
-# Should show a COPY step that includes the .traineddata files
+docker compose exec ocr-lab-server bun -e "const r = await fetch('https://cdn.jsdelivr.net/'); console.log(r.status)"
+# Should return 200
 ```
+
+If the container cannot reach the CDN, check your firewall rules and DNS. Language data will be cached after the first request, so retrying may work after connectivity is restored.
 
 ---
 
@@ -115,17 +115,17 @@ depends_on:
     condition: service_healthy
 ```
 
-This requires `curl` to be installed in the server image (used by the healthcheck). If `curl` is missing, Docker skips the healthcheck and starts the frontend immediately.
-
-Verify the healthcheck is running:
+The healthcheck runs `bun -e` to fetch the `/api/health` endpoint. Verify the healthcheck is running:
 ```bash
 docker inspect ocr-lab-ts-ocr-lab-server-1 | grep -A 10 '"Health"'
 ```
 
-If `Status` is `starting` or `unhealthy`, check whether `curl` is available in the server image:
+If `Status` is `unhealthy`, the server container may not be ready. Check the server logs:
 ```bash
-docker compose exec ocr-lab-server curl http://localhost:3001/api/health
+docker compose logs ocr-lab-server
 ```
+
+The frontend will not start (`depends_on` blocks it) until the server becomes `healthy`. After the server initializes (typically 15–20 seconds), the frontend will start automatically.
 
 ---
 
@@ -167,8 +167,8 @@ Source files, `node_modules` from the build stage, or unnecessary system package
 **Fix:**  
 Both Dockerfiles use multi-stage builds. Verify the final stage only copies necessary artifacts:
 
-- **Server image:** Should contain `oven/bun:1` base + `node_modules/` + `packages/*/src/` + trained data. Source files are small; `node_modules` for Tesseract.js is unavoidably large (~300 MB).
-- **Frontend image:** Should be `node:20-alpine` + only `packages/frontend/build/` + production `node_modules`. Source files and Vite/Svelte devDependencies should NOT be present.
+- **Server image:** Should contain `oven/bun:1` base + `node_modules/` + `packages/*/src/`. Source files are small; `node_modules` for Tesseract.js is unavoidably large (~300 MB).
+- **Frontend image:** Should be `node:20-alpine` + only `packages/frontend/build/`. The SvelteKit build output is fully self-contained. Source files and devDependencies should NOT be present.
 
 Check image layers:
 ```bash
@@ -230,6 +230,6 @@ Then re-run `docker compose up --build -d`.
 
 ## See Also
 
-- [Docker deployment guide](../docker.md) — full setup reference
+- [Docker deployment guide](../plans/docker.md) — full setup reference
 - [Deployment guide (PM2)](../deployment.md) — bare-metal reference
 - [Tailwind CSS not loading](./tailwind-css-not-loading.md) — applies to both PM2 and Docker
