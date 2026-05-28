@@ -2,7 +2,7 @@
 
 **Started:** 2026-05-27
 **Status:** Complete
-**Current Phase:** Phase 4 (Production & Polish) — ✅ Complete
+**Current Phase:** Phase 5 (Docker Containerization) — ✅ Complete
 
 ---
 
@@ -14,6 +14,7 @@
 | 2. OCR API | ✅ Complete | 2026-05-27 | 2026-05-27 | POST /api/ocr, validation middleware, rate limiting, error handling |
 | 3. SvelteKit Frontend | ✅ Complete | 2026-05-27 | 2026-05-27 | Tailwind v4, Svelte 5 runes, progressive enhancement, 29 tests all passing |
 | 4. Production & Polish | ✅ Complete | 2026-05-27 | 2026-05-27 | PM2 deployment verified on VPS (103.41.206.197), deployment docs written |
+| 5. Docker Containerization | ✅ Complete | 2026-05-28 | 2026-05-28 | Multi-stage Dockerfiles, BuildKit caching, healthcheck w/ workerReady validation, Compose orchestration, all verified and cleaned up |
 
 ---
 
@@ -224,6 +225,77 @@
 | 2026-05-27 | Project-local `logs/` instead of `/var/log/ocr-lab/` | No sudo required, portable across dev/staging environments |
 | 2026-05-27 | `BUN_PATH` env var for PM2 interpreter | Bun installed per-user (`~/.bun/bin/bun`) isn't in PM2's default PATH; explicit path avoids silent fallback to Node |
 | 2026-05-27 | `ORIGIN` env var for SvelteKit adapter-node | Adapter-node defaults protocol to `https` in `get_origin()`; without `ORIGIN`, CSRF check compares browser's `http://` origin against server's `https://` origin and returns 403. Setting `ORIGIN` to the actual HTTP access URL fixes the mismatch. |
+
+---
+
+---
+## Phase 5: Docker Containerization
+
+**Goal:** Production-ready Docker images for both services with multi-stage builds, security hardening, and local development orchestration.
+
+**Plan reference:** [`docs/plans/docker.md`](docker.md)
+
+### Tasks
+
+- [x] Create `.env.docker.example` — Docker-specific env template (container names instead of localhost)
+- [x] Create `packages/server/Dockerfile`
+  - [x] Multi-stage: `deps` → `production`
+  - [x] BuildKit cache mount for `bun install` (~/.bun/install/cache)
+  - [x] Copy workspace manifests first for layer caching
+  - [x] Non-root `bun` user
+  - [x] Clean COPY syntax (no invalid shell operators)
+- [x] Create `packages/frontend/Dockerfile`
+  - [x] Three-stage: `deps` → `builder` → `production`
+  - [x] BuildKit cache mount for `bun install`
+  - [x] Build with `bun run build:frontend`, runtime on `node:20-alpine`
+  - [x] Only compiled `build/` output copied to final stage
+  - [x] Non-root `node` user
+- [x] Create `.dockerignore`
+  - [x] Excludes `node_modules/`, `build/`, `.svelte-kit/`, `logs/`, `.env`, `.git/`, `docs/`, `*.md`
+- [x] Create `docker-compose.yml`
+  - [x] Two services: `ocr-lab-server` (port 3001), `ocr-lab-frontend` (port 3000)
+  - [x] Internal bridge network (`ocr-net`)
+  - [x] Per-service `PORT` override (resolves shared `.env` conflict)
+  - [x] `BODY_SIZE_LIMIT=Infinity` for frontend
+  - [x] Healthcheck validates both HTTP status AND `workerReady` JSON field
+  - [x] Frontend depends on server health (`condition: service_healthy`)
+  - [x] 1G memory limit for server (Tesseract.js needs headroom)
+  - [x] `restart: unless-stopped` for both services
+- [x] Update `docs/plans/docker.md` with all implementation fixes
+  - [x] BuildKit cache mounts documented
+  - [x] COPY shell operator issue documented and fixed
+  - [x] Healthcheck `workerReady` body validation documented
+  - [x] `.svelte-kit/` exclusion rationale
+  - [x] Memory limit rationale (1G for Tesseract.js)
+- [x] Build and verify on VPS
+  - [x] `docker compose build` succeeds for both images
+  - [x] `docker compose up -d` — both containers start
+  - [x] `docker compose ps` — both healthy/running
+  - [x] `curl http://localhost:3001/api/health` — returns `{"status":"ok","workerReady":true}`
+  - [x] `curl http://localhost:3000/` — returns HTTP 200, 3118 bytes SSR HTML
+- [x] Destroy services and clean up
+  - [x] `docker compose down --rmi all` — images, containers, network removed
+  - [x] Restore original `.env` from backup
+
+### Acceptance Criteria
+
+- [x] Both images build without errors
+- [x] Server container starts, reports healthy only when worker is ready
+- [x] Frontend container waits for server health, then serves SSR HTML (3118 bytes)
+- [x] All containers destroyed and images removed after verification (dev VPS policy)
+
+### Notes & Decisions
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-05-28 | BuildKit cache mounts for `bun install` | Avoids re-downloading packages on repeated builds; critical for CI/CD iteration speed |
+| 2026-05-28 | Healthcheck validates `workerReady` in JSON body | `/api/health` always returns HTTP 200 even when worker isn't ready; body check prevents false healthy status |
+| 2026-05-28 | No shell operators in COPY instructions | `2>/dev/null || true` is invalid Dockerfile syntax (COPY is not a shell command) |
+| 2026-05-28 | 1G memory limit for server | Tesseract.js uses WASM + language data; 512MB caused OOM risk under concurrent load |
+| 2026-05-28 | Separate Dockerfiles per package | Monorepo context requires different build strategies (Bun runtime for server, Node for frontend); single Dockerfile would be overly complex |
+| 2026-05-28 | `oven/bun:1` (Debian) not Alpine for server | Tesseract.js WASM compatibility is guaranteed on Debian; Alpine/musl may have edge cases |
+| 2026-05-28 | `node:20-alpine` for frontend production | adapter-node output is plain Node.js; no Bun needed at runtime; Alpine keeps image slim |
+| 2026-05-28 | No `COPY` for `packages/shared/node_modules` | Shared package has zero npm deps; `bun install` never creates this directory; COPY would fail with "not found" |
 
 ---
 

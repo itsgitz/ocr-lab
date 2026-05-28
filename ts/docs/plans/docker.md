@@ -147,13 +147,16 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 # Install all workspace deps (bun needs full workspace structure)
-RUN bun install --frozen-lockfile
+# BuildKit cache mount avoids re-downloading packages on repeated builds
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
 FROM oven/bun:1 AS production
 WORKDIR /app
+# Copy deps from the deps stage — no shell operators, these directories exist
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules 2>/dev/null || true
+COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 # Copy source code
 COPY packages/server/ packages/server/
 COPY packages/shared/ packages/shared/
@@ -170,6 +173,8 @@ CMD ["bun", "run", "packages/server/src/index.ts"]
 - Tesseract.js downloads language data from the jsdelivr CDN at runtime (requires outbound internet access).
 - Runs as non-root user (`bun`) for security.
 - Exposes port `3001`.
+- **BuildKit cache mount** (`--mount=type=cache,target=/root/.bun/install/cache`) avoids re-downloading all packages on repeated builds — the Bun cache persists across build invocations.
+- **No `COPY` for `packages/shared/node_modules`** — the `shared` package has zero npm dependencies (`package.json` only has `exports`), so `bun install` never creates `packages/shared/node_modules/`. Attempting to `COPY` it from the `deps` stage would fail with "not found". Only `packages/server/node_modules` and root `node_modules` are copied.
 
 ### `packages/frontend/Dockerfile`
 
@@ -189,17 +194,21 @@ CMD ["bun", "run", "packages/server/src/index.ts"]
 # packages/frontend/Dockerfile
 FROM oven/bun:1 AS deps
 WORKDIR /app
+# Copy workspace manifests first for layer caching
 COPY package.json bun.lock ./
 COPY packages/server/package.json packages/server/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
-RUN bun install --frozen-lockfile
+# BuildKit cache mount avoids re-downloading packages on repeated builds
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
 FROM oven/bun:1 AS builder
 WORKDIR /app
+# Copy deps from deps stage — all directories exist after bun install
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/frontend/node_modules ./packages/frontend/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules 2>/dev/null || true
+COPY --from=deps /app/packages/frontend/node_modules ./packages/frontend/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 # Copy all source needed for the build
 COPY packages/frontend/ packages/frontend/
 COPY packages/shared/ packages/shared/
@@ -221,6 +230,8 @@ CMD ["node", "build/index.js"]
 - The `tsconfig.json` is copied to the builder stage because `packages/shared` uses path aliases that may be resolved during build.
 - Runs as non-root user (`node`) for security.
 - Exposes port `3000`.
+- **BuildKit cache mount** (`--mount=type=cache`) used in `deps` stage for accelerated rebuilds.
+- **No `COPY` for `packages/shared/node_modules`** — shared has zero dependencies, so the directory never exists after `bun install`.
 
 ---
 
@@ -241,7 +252,10 @@ services:
       - ocr-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:3001/api/health'); if(!r.ok) process.exit(1)"]
+      # Validates both HTTP status AND worker readiness — /api/health returns 200
+      # even when workerReady:false. The JSON body check prevents the frontend
+      # from starting before the Tesseract worker finishes initializing.
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:3001/api/health'); const j = await r.json(); if(!r.ok || !j.workerReady) process.exit(1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -249,7 +263,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          # Tesseract.js loads ~5MB language data per language (+ WASM overhead).
+          # 768MB minimum recommended; 1G safe for concurrent OCR processing.
+          memory: 1G
 
   ocr-lab-frontend:
     build:
@@ -287,8 +303,9 @@ Place this at the monorepo root (`ts/.dockerignore`):
 node_modules/
 packages/*/node_modules/
 
-# Frontend build output (rebuilt inside image)
+# Frontend build output & generated code (rebuilt inside image)
 packages/frontend/build/
+.svelte-kit/
 
 # Runtime / local state
 logs/
@@ -310,7 +327,9 @@ docs/
 README*
 ```
 
-> **Note:** Tesseract trained data files are not needed in the Docker build context. Tesseract.js downloads language data from the jsdelivr CDN at runtime.
+> **Note:** `.svelte-kit/` is excluded because it's a generated directory (SvelteKit type definitions and intermediate build artifacts). It would be wasted data in the build context since the frontend runs a clean `bun run build:frontend` inside the Docker build.
+>
+> Tesseract trained data files are not needed in the Docker build context. Tesseract.js downloads language data from the jsdelivr CDN at runtime.
 
 ---
 
@@ -417,6 +436,12 @@ retries: 3      — mark unhealthy after 3 consecutive failures
 start_period: 15s — grace period for Tesseract worker initialization
 ```
 
+**Important:** The healthcheck validates both the HTTP status AND the `workerReady` field in the JSON response body. `/api/health` always returns HTTP 200 (even when the Tesseract worker hasn't finished initializing), so a simple `if(!r.ok)` check would incorrectly report the server as healthy before the worker is ready. The healthcheck command parses the response body to confirm the worker is fully initialized:
+
+```yaml
+test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:3001/api/health'); const j = await r.json(); if(!r.ok || !j.workerReady) process.exit(1)"]
+```
+
 The frontend container will not start until the server reports `healthy`. This prevents the frontend from receiving connection errors during server cold-start (Tesseract worker initialization takes a few seconds).
 
 ---
@@ -486,18 +511,15 @@ adapter-node defaults to a 512KB body size limit. The OCR server accepts 10MB im
 
 **Symptom if missed:** `bun install --frozen-lockfile` exits with "workspace package not found" error.
 
-### 4. Healthcheck with top-level await
+### 4. Healthcheck validates worker readiness (not just HTTP 200)
 
-The healthcheck command uses `bun -e` with top-level await syntax. This works in `oven/bun:1` but may confuse some Docker/compose versions that incorrectly parse the CMD array. If the healthcheck fails unexpectedly, verify with:
+The healthcheck command validates BOTH the HTTP response status AND the `workerReady` field in the JSON body. `/api/health` always returns HTTP 200 — even when the Tesseract worker hasn't initialized. Without the body check, the frontend could start before the server is truly ready.
 
+**Symptom if missed:** Frontend starts immediately but receives API errors from the server during the first few OCR requests (while the worker finishes loading).
+
+**Verify manually:**
 ```bash
-docker compose exec ocr-lab-server bun -e "const r = await fetch('http://localhost:3001/api/health'); if(!r.ok) process.exit(1)"
-```
-
-**Alternative:** Install `curl` in the server image and use:
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+docker compose exec ocr-lab-server bun -e "const r = await fetch('http://localhost:3001/api/health'); const j = await r.json(); if(!r.ok || !j.workerReady) process.exit(1)"
 ```
 
 ### 5. Tesseract.js CDN access
@@ -505,6 +527,14 @@ healthcheck:
 The server container must have outbound internet access to `cdn.jsdelivr.net` on first OCR request (or startup). Language data (~5MB per language) is downloaded and cached in memory.
 
 **Symptom if missed:** First OCR request hangs or times out with a network error.
+
+### 6. Memory limit for Tesseract.js
+
+The server container is limited to 1G memory. Tesseract.js loads language data (~5MB per language) and runs a WASM-based OCR engine, which can spike memory usage during processing — especially with large images or multi-language jobs.
+
+**Symptom if missed:** Container gets OOM-killed during OCR processing of large images, or when processing multiple concurrent requests.
+
+**Fix:** Monitor memory usage with `docker stats` and adjust the memory limit in `docker-compose.yml` under `deploy.resources.limits.memory` if needed. Consider setting `swap: 512m` to allow some swap headroom on disk-backed VPS instances.
 
 ---
 
