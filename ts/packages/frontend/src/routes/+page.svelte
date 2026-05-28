@@ -71,7 +71,7 @@
     <h1 class="typo-display-mega text-ink">
       Extract text<br />from images
     </h1>
-    <p class="typo-body-md mx-auto mt-4 max-w-lg text-balance text-body">
+    <p class="typo-body-md mx-auto mt-4 max-w-[480px] text-balance text-body">
       Upload a screenshot or photo and get clean, copyable text in seconds. No sign-up required.
     </p>
   </div>
