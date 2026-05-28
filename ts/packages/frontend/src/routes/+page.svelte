@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { PageProps } from "./$types";
   import { enhance } from "$app/forms";
+  import UploadZone from "$lib/components/UploadZone.svelte";
+  import TimelinePill from "$lib/components/TimelinePill.svelte";
 
   let { data, form }: PageProps = $props();
 
@@ -8,7 +10,7 @@
   let isSubmitting = $state(false);
   let previewUrl: string | null = $state(null);
   let uploadedFileName: string | null = $state(null);
-  let fileInput: HTMLInputElement;
+  let fileInput: HTMLInputElement = $state() as unknown as HTMLInputElement;
 
   function handleDrop(e: DragEvent) {
     e.preventDefault();
@@ -58,97 +60,49 @@
 </script>
 
 <svelte:head>
-  <title>OCR Lab</title>
+  <title>OCR Lab — Extract Text from Images</title>
 </svelte:head>
 
-<div class="mx-auto max-w-lg px-4 py-12 sm:px-6 sm:py-16">
-  <h1 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">
-    OCR Lab
-  </h1>
-  <p class="mt-2 text-center text-gray-500">
-    Extract text from images instantly
-  </p>
+<div class="mx-auto max-w-[640px] px-6 pb-section pt-section sm:px-10 sm:pt-section">
+  <div class="text-center">
+    <div class="typo-caption-uppercase mb-6 text-muted tracking-[1.5px]">
+      OCR Tool
+    </div>
+    <h1 class="typo-display-mega text-ink">
+      Extract text<br />from images
+    </h1>
+    <p class="typo-body-md mx-auto mt-4 max-w-lg text-balance text-body">
+      Upload a screenshot or photo and get clean, copyable text in seconds. No sign-up required.
+    </p>
+  </div>
 
   <form
     method="POST"
     enctype="multipart/form-data"
     use:enhance={handleEnhance}
-    class="mt-8 space-y-6"
+    class="mt-section space-y-6"
   >
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div
-      class="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 transition-colors {isDragging
-        ? 'border-blue-500 bg-blue-50'
-        : 'border-gray-300 hover:border-gray-400'}"
-      role="button"
-      tabindex="0"
-      onkeydown={(e) => {
-        if (e.key === "Enter" || e.key === " ") fileInput?.click();
-      }}
-      ondragover={(e) => {
-        e.preventDefault();
-        isDragging = true;
-      }}
-      ondragleave={() => {
-        isDragging = false;
-      }}
-      ondrop={handleDrop}
-      onclick={() => fileInput?.click()}
-    >
-      <input
-        bind:this={fileInput}
-        type="file"
-        name="image"
-        accept="image/png,image/jpeg,image/gif,image/bmp,image/webp"
-        required
-        class="hidden"
-        onchange={handleFileChange}
+    <div class="rounded-lg border border-hairline bg-surface-card p-6 sm:p-8">
+      <UploadZone
+        bind:isDragging
+        bind:previewUrl
+        bind:uploadedFileName
+        bind:fileInput
+        {handleDrop}
+        {handleFileChange}
       />
-
-      {#if previewUrl}
-        <img
-          src={previewUrl}
-          alt="Upload preview"
-          class="max-h-48 rounded-lg object-contain"
-        />
-      {:else if uploadedFileName}
-        <p class="text-sm text-gray-600">{uploadedFileName}</p>
-      {:else}
-        <svg
-          class="mx-auto h-12 w-12 text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-          />
-        </svg>
-        <p class="mt-2 text-sm text-gray-600">
-          <span class="font-semibold text-blue-600">Click to upload</span>
-          or drag and drop
-        </p>
-        <p class="mt-1 text-xs text-gray-500">
-          PNG, JPEG, GIF, BMP, WebP (max 10MB)
-        </p>
-      {/if}
     </div>
 
     {#if form?.error}
-      <div
-        class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-      >
-        {form.error}
+      <div class="rounded-md border border-semantic-error/30 bg-semantic-error/5 px-4 py-3">
+        <p class="typo-body-sm text-semantic-error">{form.error}</p>
       </div>
     {/if}
 
     <div class="flex gap-3">
       <select
         name="language"
-        class="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="flex-1 rounded-md border border-hairline-strong bg-surface-card px-3 py-[10px] typo-body-sm text-ink transition-colors focus:border-ink focus:outline-none"
       >
         {#each Object.entries(data.languages) as [code, label]}
           <option value={code} selected={code === "eng"}>{label}</option>
@@ -158,49 +112,65 @@
       <button
         type="submit"
         disabled={isSubmitting}
-        class="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300"
+        class="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-[18px] typo-button text-on-primary transition-colors hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {isSubmitting ? "Processing…" : "Extract Text"}
+        {#if isSubmitting}
+          <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Processing
+        {:else}
+          Extract Text
+        {/if}
       </button>
     </div>
   </form>
 
+  {#if isSubmitting}
+    <div class="mt-section">
+      <div class="typo-caption-uppercase mb-4 text-muted">Processing</div>
+      <div class="flex flex-wrap gap-2">
+        <TimelinePill stage="thinking" label="Queued" />
+        <TimelinePill stage="reading" label="Reading" />
+        <TimelinePill stage="editing" label="Processing" />
+        <TimelinePill stage="done" label="Done" />
+      </div>
+    </div>
+  {/if}
+
   {#if form?.result}
-    <div class="mt-8 space-y-4">
-      <h2 class="text-lg font-semibold">Extracted Text</h2>
+    <div class="mt-section space-y-6">
+      <div class="typo-title-md text-ink">Extracted Text</div>
 
-      <pre
-        class="overflow-x-auto whitespace-pre-wrap rounded-lg border bg-white p-4 font-mono text-sm leading-relaxed"
-      >{form.result.text}</pre>
+      <div class="rounded-lg border border-hairline bg-surface-card p-5">
+        <pre
+          class="typo-code overflow-x-auto whitespace-pre-wrap text-ink"
+        >{form.result.text}</pre>
+      </div>
 
-      <div
-        class="flex flex-wrap items-center gap-4 text-sm text-gray-600"
-      >
-        <span
-          >Confidence:
-          <strong>{form.result.confidence}%</strong></span
-        >
-        <span
-          >Time:
-          <strong
-          >{(form.result.processingTimeMs / 1000).toFixed(1)}s</strong></span
-        >
-        <span
-          >Language:
-          <strong>{form.result.language}</strong></span
-        >
+      <div class="flex flex-wrap items-center gap-5 typo-body-sm text-muted">
+        <span>
+          Confidence
+          <strong class="ml-1 text-ink">{form.result.confidence}%</strong>
+        </span>
+        <span class="text-hairline">|</span>
+        <span>
+          Time
+          <strong class="ml-1 text-ink">{(form.result.processingTimeMs / 1000).toFixed(1)}s</strong>
+        </span>
+        <span class="text-hairline">|</span>
+        <span>
+          Language
+          <strong class="ml-1 text-ink">{form.result.language}</strong>
+        </span>
       </div>
 
       <button
         onclick={() => copyToClipboard(form.result.text)}
-        class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        class="inline-flex h-10 items-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-[18px] typo-button text-ink transition-colors hover:bg-canvas-soft"
       >
-        <svg
-          class="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
