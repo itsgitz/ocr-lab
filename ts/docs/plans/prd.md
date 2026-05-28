@@ -174,13 +174,18 @@ ocr-lab/ts/
 │   │   ├── tsconfig.json
 │   │   └── src/
 │   │       ├── routes/
-│   │       │   ├── +page.svelte      # Upload UI (Tailwind CSS)
+│   │       │   ├── +layout.svelte    # Root layout: imports app.css, TopNav, footer
+│   │       │   ├── +page.svelte      # Upload UI (design system)
 │   │       │   ├── +page.server.ts   # Form action → calls Hono API
 │   │       │   └── +page.server.test.ts
 │   │       ├── lib/
+│   │       │   ├── components/
+│   │       │   │   ├── TopNav.svelte        # Responsive nav + hamburger
+│   │       │   │   ├── UploadZone.svelte    # Drag-and-drop upload area
+│   │       │   │   └── TimelinePill.svelte  # Processing stage pills
 │   │       │   └── api.ts            # Typed API client
-│   │       ├── app.html
-│   │       ├── app.css               # @import "tailwindcss"
+│   │       ├── app.html              # Google Fonts preconnect + Inter / JetBrains Mono
+│   │       ├── app.css               # Tailwind v4 + custom design tokens + .typo-* utilities
 │   │       └── app.d.ts              # SvelteKit ambient types
 │   │
 │   └── shared/                       # Shared types
@@ -444,13 +449,16 @@ module.exports = {
 - [ ] Add loading state during processing
 - [ ] Add error message display
 - [ ] Write component tests for form action
-- [ ] Style with CSS (minimal, clean)
+- [ ] Style with custom design system (`app.css` — Tailwind v4 `@theme` + `@layer utilities`)
+- [ ] Implement responsive layout with warm cream canvas, hairline borders, and editorial typography
+- [ ] Add processing timeline with pastel stage pills (`TimelinePill`)
 
 **Acceptance Criteria:**
 - Page renders server-side
 - Upload form submits via form action
 - Result displays with text, confidence, copy button
 - Works without JavaScript (progressive enhancement)
+- Custom design system applied (no raw Tailwind utilities like `text-xl font-bold`)
 - All tests pass
 
 ---

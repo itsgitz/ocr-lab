@@ -109,4 +109,6 @@ SvelteKit's plugin transforms `.svelte` files before Tailwind sees them.
 | File | Change |
 |------|--------|
 | `packages/frontend/src/routes/+layout.svelte` | Created — imports `app.css`, renders children |
-| `packages/frontend/src/app.css` | Added `@source "./**/*.{svelte,ts,js}"` directive |
+| `packages/frontend/src/app.css` | Added `@source "./**/*.{svelte,ts,js}"` directive; expanded with full design-system `@theme` (colors, typography, spacing, radius) and `@layer utilities` (`.typo-*` classes). See `ts/DESIGN.md` for the full design specification. |
+| `packages/frontend/src/app.html` | Added Google Fonts preconnect + Inter / JetBrains Mono links |
+| `packages/frontend/src/lib/components/` | `TopNav.svelte`, `UploadZone.svelte`, `TimelinePill.svelte` — design-system components |

@@ -146,7 +146,7 @@ Browser → http://<IP>:3000 (SvelteKit SSR)
                                               └─ Tesseract.js worker (single instance)
 ```
 
-- **Frontend** (port 3000): SvelteKit with `adapter-node`, renders SSR pages
+- **Frontend** (port 3000): SvelteKit with `adapter-node`, renders SSR pages using a custom design system (warm cream canvas, Cursor Orange CTAs, editorial typography). See `ts/DESIGN.md` for the full design specification.
 - **Server** (port 3001): Hono API running on Bun, handles OCR processing
 - No CORS needed — frontend calls API via server-side fetch
 

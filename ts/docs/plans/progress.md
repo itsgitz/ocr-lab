@@ -312,6 +312,48 @@
 
 ---
 
+## Post-Docker: UI Redesign
+
+**Goal:** Replace the default Tailwind utility-class styling with a cohesive, editorial design system inspired by Cursor's marketing site.
+
+### Tasks
+
+- [x] Define design system in `ts/DESIGN.md`
+  - [x] Warm cream canvas (`#f7f7f4`) with near-black ink (`#26251e`)
+  - [x] Cursor Orange (`#f54e00`) as the single primary CTA color
+  - [x] Custom typography scale (display-mega → caption-uppercase) with negative letter-spacing on display
+  - [x] Spacing tokens, border-radius scale, hairline-only depth (no shadows)
+  - [x] AI timeline pastel palette (peach, mint, blue, lavender, gold) for processing pills
+- [x] Implement design system in `app.css`
+  - [x] Tailwind v4 `@theme` block with all color/spacing/radius tokens
+  - [x] `@layer utilities` with `.typo-*` classes for every typography token
+  - [x] Responsive display-mega sizing (72px → 56px → 32px)
+- [x] Rebuild page layout (`+page.svelte`)
+  - [x] Hero with caption-uppercase label, display-mega heading, balanced subtitle
+  - [x] Card-wrapped upload zone with hairline border
+  - [x] Language selector + primary CTA button with spinner state
+  - [x] Processing timeline with pastel pills (`TimelinePill`)
+  - [x] Result display with metadata row and copy-to-clipboard button
+- [x] Extract reusable components (`lib/components/`)
+  - [x] `UploadZone.svelte` — drag-and-drop with preview, keyboard accessible
+  - [x] `TopNav.svelte` — responsive nav with hamburger menu
+  - [x] `TimelinePill.svelte` — colored processing stage pills
+- [x] Update `+layout.svelte` with branded footer
+- [x] Update `app.html` with Google Fonts preconnect + Inter/JetBrains Mono
+
+### Acceptance Criteria
+
+- [x] Page renders with warm cream background, not default white/gray
+- [x] All text uses the custom typography scale (no raw `text-xl font-bold`)
+- [x] Primary CTA uses Cursor Orange (`bg-primary`) with hover state
+- [x] Upload zone uses dashed hairline border with drag highlight
+- [x] Processing timeline shows 4 pastel pills during OCR
+- [x] Result metadata uses `|` separators with muted text
+- [x] Footer matches the branded nav style
+- [x] Mobile: hamburger menu works, display-mega scales to 32px
+
+---
+
 ## Blockers
 
 | Date | Blocker | Status | Resolution |
