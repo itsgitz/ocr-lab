@@ -6,8 +6,6 @@ services:
     ports:
       - "3001:3001"
     env_file: .env
-    environment:
-      - PORT=3001
     networks:
       - ocr-net
     restart: unless-stopped
@@ -31,7 +29,6 @@ services:
     env_file: .env
     environment:
       - PORT=3000
-      - BODY_SIZE_LIMIT=Infinity
     depends_on:
       ocr-lab-server:
         condition: service_healthy

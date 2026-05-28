@@ -255,8 +255,8 @@
 - [x] Create `docker-compose.yml`
   - [x] Two services: `ocr-lab-server` (port 3001), `ocr-lab-frontend` (port 3000)
   - [x] Internal bridge network (`ocr-net`)
-  - [x] Per-service `PORT` override (resolves shared `.env` conflict)
-  - [x] `BODY_SIZE_LIMIT=Infinity` for frontend
+  - [x] Per-service `PORT` override for frontend only (server uses `.env`'s `PORT=3001` directly)
+  - [x] `BODY_SIZE_LIMIT=Infinity` in `.env` (flows via `env_file:` — no duplication)
   - [x] Healthcheck validates both HTTP status AND `workerReady` JSON field
   - [x] Frontend depends on server health (`condition: service_healthy`)
   - [x] 1G memory limit for server (Tesseract.js needs headroom)

@@ -76,7 +76,7 @@ cp .env.docker.example .env
 | `ORIGIN` | `http://<vps-ip>:3000` | `http://localhost:3000` (local) or `http://<vps-ip>:3000` (remote) | Same CSRF rule applies |
 | `BUN_PATH` | `/home/user/.bun/bin/bun` | *(omit)* | Bun is already in `PATH` inside `oven/bun` image |
 | `BODY_SIZE_LIMIT` | *(not set — bare-metal PM2 runs server directly)* | `Infinity` | adapter-node defaults to 512KB; must allow large image pass-through |
-| `PORT` | `3001` in `.env` | Overridden per-service in compose | Both services read `PORT`; compose `environment:` resolves the conflict |
+| `PORT` | `3001` in `.env` | Overridden in frontend compose `environment:` | Both services read `PORT`; frontend overrides to `3000` via compose `environment:`, server uses `.env`'s `3001` directly |
 
 ### Full variable reference
 
@@ -91,7 +91,7 @@ cp .env.docker.example .env
 | `ORIGIN` | `http://localhost:3000` | SvelteKit adapter-node origin — prevents CSRF 403 |
 | `BODY_SIZE_LIMIT` | `512KB` | adapter-node request body limit. **Must set to `Infinity` or `10485760`** — default 512KB rejects image uploads before they reach the API |
 
-> **PORT conflict:** Both the server (`packages/server/src/index.ts`) and the frontend (`adapter-node`) read the `PORT` environment variable. Since both services share the same `.env` file via `env_file:`, you **must** override `PORT` per-service in `docker-compose.yml` using the `environment:` key (see compose spec below). Do NOT rely on `FRONTEND_PORT` — adapter-node does not read it.
+> **PORT conflict:** Both the server (`packages/server/src/index.ts`) and the frontend (`adapter-node`) read the `PORT` environment variable. Since both services share the same `.env` file via `env_file:`, the frontend overrides `PORT=3000` in its `environment:` block. The server uses `.env`'s `PORT=3001` directly, so no override is needed there. Do NOT rely on `FRONTEND_PORT` — adapter-node does not read it.
 
 ---
 
@@ -119,7 +119,7 @@ BODY_SIZE_LIMIT=Infinity
 ORIGIN=http://REPLACE_WITH_YOUR_IP:3000
 ```
 
-> **Note:** `PORT` for each service is set via `environment:` in `docker-compose.yml`, not in this file. This avoids the conflict where both services read the same `PORT` variable.
+> **Note:** `PORT` is set via `environment:` in `docker-compose.yml` for the frontend service (overriding `.env`'s `PORT=3001`). The server reads `PORT=3001` directly from `.env`. All other variables (`BODY_SIZE_LIMIT`, `ORIGIN`, etc.) are sourced from `.env` via `env_file:` — no duplication needed.
 
 ---
 
@@ -246,8 +246,6 @@ services:
     ports:
       - "3001:3001"
     env_file: .env
-    environment:
-      - PORT=3001                       # explicit override — .env is shared
     networks:
       - ocr-net
     restart: unless-stopped
@@ -276,7 +274,6 @@ services:
     env_file: .env
     environment:
       - PORT=3000                       # adapter-node reads PORT, not FRONTEND_PORT
-      - BODY_SIZE_LIMIT=Infinity        # allow large image uploads (default 512KB)
     depends_on:
       ocr-lab-server:
         condition: service_healthy      # wait for /api/health to pass
@@ -478,8 +475,8 @@ Without this, you may see `exec format error` when running the image on a differ
 
 - [ ] `PUBLIC_API_URL=http://ocr-lab-server:3001` in `.env` (container name, not localhost)
 - [ ] `ORIGIN=http://<staging-ip>:3000` in `.env` (prevents CSRF 403)
-- [ ] `PORT` overridden per-service in `docker-compose.yml` (`3001` for server, `3000` for frontend)
-- [ ] `BODY_SIZE_LIMIT=Infinity` set for frontend container
+- [ ] `PORT=3000` set in frontend `environment:` in `docker-compose.yml` (server reads `PORT=3001` from `.env`)
+- [ ] `BODY_SIZE_LIMIT=Infinity` in `.env` (passed to both services via `env_file:`)
 - [ ] Ports 3000 and 3001 open in firewall / security group
 - [ ] `docker compose up --build -d` completes without error
 - [ ] `docker compose ps` shows both services as `healthy` / `running`
@@ -493,7 +490,7 @@ Without this, you may see `exec format error` when running the image on a differ
 
 ### 1. PORT variable conflict
 
-Both services read `PORT` from the environment. adapter-node (frontend) reads `PORT` to decide which port to listen on — it does **not** read `FRONTEND_PORT`. Since both services share the same `.env` file, you must override `PORT` per-service via `environment:` in `docker-compose.yml`.
+Both services read `PORT` from the environment. adapter-node (frontend) reads `PORT` to decide which port to listen on — it does **not** read `FRONTEND_PORT`. Since both services share the same `.env` file, the frontend overrides `PORT=3000` via `environment:` in `docker-compose.yml`. The server uses `.env`'s `PORT=3001` directly.
 
 **Symptom if missed:** Frontend starts on port 3001 (same as server), or server starts on 3000.
 
@@ -503,7 +500,7 @@ adapter-node defaults to a 512KB body size limit. The OCR server accepts 10MB im
 
 **Symptom if missed:** Large image uploads fail with a 413 error from the frontend container, never reaching the backend.
 
-**Fix:** Set `BODY_SIZE_LIMIT=Infinity` in the frontend container environment (let the backend enforce the 10MB limit via `maxRequestBodySize` and the `validateImage` middleware).
+**Fix:** Set `BODY_SIZE_LIMIT=Infinity` in `.env` (passed to both services via `env_file:`). The backend enforces the 10MB limit via `maxRequestBodySize` and the `validateImage` middleware.
 
 ### 3. Bun workspace resolution during Docker build
 
