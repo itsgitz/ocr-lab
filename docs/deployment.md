@@ -7,9 +7,7 @@ Two deployment paths:
 
 ## Docker Deployment
 
-> **Status: planned, not yet applied.** This section documents the target setup from
-> `docs/troubleshooting/docker-hardening-plan.md`. The current `docker-compose.yml` and
-> Dockerfiles do not implement it yet — follow the plan doc to apply.
+> **Status: applied 2026-06-07.** Docker hardening from `docs/troubleshooting/docker-hardening-plan.md`.
 
 ### Environment files (split per service)
 
@@ -72,7 +70,7 @@ Server healthcheck has `start_period: 60s` — first start downloads tesseract W
 
 | Setting | Why |
 |---------|-----|
-| `mem_limit` / `mem_reservation` | Real, enforced limits. The old `deploy.resources` block was swarm-only and **silently ignored** by `docker compose up`. |
+| `mem_limit` / `mem_reservation` | Real, enforced limits (Compose v2 also honors `deploy.resources.limits.memory`; the swap was for clarity/portability and to add a reservation). |
 | `init: true` | PID-1 signal forwarding + zombie reaping |
 | `cap_drop: ALL`, `no-new-privileges` | Minimal capabilities; blocks privilege escalation |
 | `logging.options.max-size/max-file` | Log rotation (10 MB × 3) |

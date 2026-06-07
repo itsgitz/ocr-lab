@@ -3,42 +3,71 @@ services:
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    ports:
-      - "3001:3001"
-    env_file: .env
+    expose:
+      - "3001"
+    env_file: .env.server
     networks:
       - ocr-net
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    image: ocr-lab/server:${TAG:-dev}
     healthcheck:
       test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:3001/api/health'); const j = await r.json(); if(!r.ok || !j.workerReady) process.exit(1)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 1G
+      start_period: 60s
+    mem_limit: 1g
+    mem_reservation: 512m
+    stop_grace_period: 30s
+    pids_limit: 512
+    cpus: "1.5"
 
   ocr-lab-frontend:
     build:
       context: .
       dockerfile: packages/frontend/Dockerfile
       args:
-        - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
+        - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:?must be set in root .env or shell}
     ports:
-      - "3000:3000"
-    env_file: .env
+      - "127.0.0.1:3000:3000"
+    env_file: .env.frontend
     environment:
       - PORT=3000
-      - ORIGIN=${ORIGIN}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
     depends_on:
       ocr-lab-server:
         condition: service_healthy
     networks:
       - ocr-net
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    image: ocr-lab/frontend:${TAG:-dev}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    mem_limit: 512m
+    pids_limit: 256
 
 networks:
   ocr-net:
