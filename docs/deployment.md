@@ -1,5 +1,114 @@
 # OCR Lab — Deployment Guide
 
+Two deployment paths:
+
+- **[Docker Compose](#docker-deployment)** — containerized, recommended
+- **[PM2 (native)](#prerequisites)** — runs directly on the host
+
+## Docker Deployment
+
+> **Status: planned, not yet applied.** This section documents the target setup from
+> `docs/troubleshooting/docker-hardening-plan.md`. The current `docker-compose.yml` and
+> Dockerfiles do not implement it yet — follow the plan doc to apply.
+
+### Environment files (split per service)
+
+Env files are split per service so server and frontend don't leak config into each other and `PORT` can't collide:
+
+| File | Used by | Copy from |
+|------|---------|-----------|
+| `.env.server` | `ocr-lab-server` (`env_file`) | `.env.server.example` |
+| `.env.frontend` | `ocr-lab-frontend` (`env_file`) | `.env.frontend.example` |
+| `.env` (root) | docker compose `${VAR}` interpolation only | — |
+
+```bash
+cp .env.server.example .env.server
+cp .env.frontend.example .env.frontend
+# edit .env.frontend: set ORIGIN and CSRF_TRUSTED_ORIGINS to your public URL
+```
+
+**`PORT` is intentionally absent from both env files** — `docker-compose.yml` sets it per service (`PORT=3001` server, `PORT=3000` frontend). Do not add it back; a shared `PORT` in a single env file previously caused a hidden collision where the frontend only worked because a compose override masked it.
+
+### Build-time vs runtime variables
+
+Two different mechanisms — do not confuse them:
+
+| Mechanism | Source | Used for |
+|-----------|--------|----------|
+| Compose `${VAR}` interpolation | root `.env` (auto-loaded) or shell | `CSRF_TRUSTED_ORIGINS` build arg, optional `TAG` image tag |
+| `env_file:` injection | `.env.server` / `.env.frontend` | everything the running container reads |
+
+`CSRF_TRUSTED_ORIGINS` is needed in **both** places:
+
+1. **Build time** (root `.env` or shell) — `svelte.config.js` reads it during `vite build` and bakes it into `csrf.trustedOrigins`. The compose build arg uses fail-fast syntax (`${CSRF_TRUSTED_ORIGINS:?...}`) so the build errors loudly instead of silently producing a broken bundle.
+2. **Runtime** (`.env.frontend`) — adapter-node origin checks.
+
+`ORIGIN` is runtime-only (`.env.frontend`).
+
+### Network topology
+
+```
+Internet → reverse proxy (nginx/caddy, TLS) → 127.0.0.1:3000 (frontend)
+                                                    │
+                                   ocr-net (internal docker network)
+                                                    │
+                                    http://ocr-lab-server:3001 (API)
+```
+
+- **Frontend** publishes `127.0.0.1:3000:3000` — localhost only. A reverse proxy is **required** for external access.
+- **Server** publishes nothing (`expose: 3001` only) — reachable solely over the internal `ocr-net` network as `http://ocr-lab-server:3001` (`PUBLIC_API_URL` in `.env.frontend`).
+
+### Build and run
+
+```bash
+docker compose build
+docker compose up -d
+docker compose ps          # wait for both services healthy
+```
+
+Server healthcheck has `start_period: 60s` — first start downloads tesseract WASM/traineddata after the HTTP server is already listening, and the healthcheck requires `workerReady: true`. Don't panic if it reports `starting` for up to a minute.
+
+### Hardening applied (docker-compose.yml)
+
+| Setting | Why |
+|---------|-----|
+| `mem_limit` / `mem_reservation` | Real, enforced limits. The old `deploy.resources` block was swarm-only and **silently ignored** by `docker compose up`. |
+| `init: true` | PID-1 signal forwarding + zombie reaping |
+| `cap_drop: ALL`, `no-new-privileges` | Minimal capabilities; blocks privilege escalation |
+| `logging.options.max-size/max-file` | Log rotation (10 MB × 3) |
+| `127.0.0.1` port binding / `expose` | No services on public interfaces |
+| Base images pinned by digest | Reproducible builds, no silent base drift |
+| `image: ocr-lab/*:${TAG:-dev}` | Named images for rollback/promotion (`TAG=v1.2.3 docker compose build`) |
+
+Not yet applied (follow-ups): `read_only: true` rootfs (needs tesseract cache-path testing), pre-baking traineddata into the server image.
+
+### Verification checklist
+
+```bash
+docker compose config                    # valid, no warnings
+docker compose ps                        # both healthy
+docker inspect ocr-lab-ocr-lab-server-1 --format '{{.HostConfig.Memory}}'
+                                         # 1073741824 — limit actually enforced
+docker compose exec ocr-lab-server ls node_modules | grep @types
+                                         # empty — dev deps pruned from image
+curl -s http://127.0.0.1:3000 | head -1  # frontend serves (localhost only)
+# functional: upload an image through the frontend, expect OCR text back
+```
+
+### Updating images
+
+```bash
+git pull
+docker compose build
+docker compose up -d     # recreates changed containers
+```
+
+Base images are digest-pinned in the Dockerfiles (`oven/bun:1@sha256:…` = bun 1.3.14, `node:20-alpine@sha256:…` = node v20.20.2). To bump: `docker pull oven/bun:1`, grab the new digest from `docker images --digests`, update both Dockerfiles.
+
+---
+
+# PM2 Deployment (native)
+
 ## Prerequisites
 
 | Tool | Version | Install |
